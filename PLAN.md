@@ -244,6 +244,13 @@ are only listed by name and description. So `town` must be a **kernel skill**
 responder's context without editing headlong core, and the entire "who speaks"
 policy rides on it.
 
+*Verified against `headlong/bin/skills` at 66e99b7:* a kernel skill contributes
+its **body** and a regular skill contributes **only** its name and description.
+Note the asymmetry — `action_prompt` strips frontmatter from kernel skills with
+`sed '/^---$/,/^---$/d'`, so a kernel skill's `description:` is never shown. The
+`town` SKILL.md body must therefore be self-contained; nothing in its frontmatter
+reaches any model.
+
 Cost: one utterance in an N-person conversation costs N−1 responder calls, most
 returning `NO_REPLY`. That is the price of a live group, and it is what
 `MONOLITH_REPLY_MODEL` — already a separate knob from `THINK_MODEL` — is for.

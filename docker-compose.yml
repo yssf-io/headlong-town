@@ -1,0 +1,77 @@
+# headlong-town — local stack
+#
+# Containerised: the Convex backend (stateful) and its dashboard.
+# On the host:   the Vite frontend (`npm run dev:frontend` in ai-town/) and
+#                Ollama, because both want a fast edit/reload loop and Ollama
+#                wants the GPU.
+#
+# The frontend is available in-container too, under the `full` profile, for a
+# one-command demo:  docker compose --profile full up
+#
+# See PLAN.md §2 and README.md.
+
+name: headlong-town
+
+services:
+  backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - '${CONVEX_PORT:-3210}:3210'       # Convex API
+      - '${CONVEX_SITE_PORT:-3211}:3211'  # HTTP actions (convex/http.ts)
+    volumes:
+      - convex-data:/convex/data
+    environment:
+      - INSTANCE_NAME=${INSTANCE_NAME:-headlong-town}
+      - INSTANCE_SECRET=${INSTANCE_SECRET:-}
+      - CONVEX_RELEASE_VERSION_DEV=${CONVEX_RELEASE_VERSION_DEV:-}
+      # Agent operations call an LLM and can be slow. The default (~10s) times
+      # out even stock AI Town on a local model; a Headlong mind is slower still.
+      - ACTIONS_USER_TIMEOUT_SECS=${ACTIONS_USER_TIMEOUT_SECS:-120}
+      - CONVEX_CLOUD_ORIGIN=${URL_BASE:-http://127.0.0.1}:${CONVEX_PORT:-3210}
+      - CONVEX_SITE_ORIGIN=${URL_BASE:-http://127.0.0.1}:${CONVEX_SITE_PORT:-3211}
+      - DATABASE_URL=${DATABASE_URL:-}
+      - RUST_LOG=${RUST_LOG:-info}
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3210/version']
+      interval: 5s
+      start_period: 10s
+      retries: 10
+    extra_hosts:
+      # Lets Convex actions reach Ollama (and later the bridge) on the host.
+      - 'host.docker.internal:host-gateway'
+    networks: [town]
+
+  dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    ports:
+      - '${DASHBOARD_PORT:-6791}:6791'
+    environment:
+      - NEXT_PUBLIC_DEPLOYMENT_URL=http://127.0.0.1:${CONVEX_PORT:-3210}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [town]
+
+  # Optional: the whole thing in Docker. Slow to build (Ubuntu + node 18 from
+  # source); prefer the host frontend while developing.
+  frontend:
+    profiles: [full]
+    build:
+      context: ./ai-town
+    ports:
+      - '${FRONTEND_PORT:-5173}:5173'
+    environment:
+      - VITE_CONVEX_URL=http://127.0.0.1:${CONVEX_PORT:-3210}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [town]
+
+volumes:
+  convex-data:
+
+networks:
+  town:
+    driver: bridge
