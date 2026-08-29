@@ -43,7 +43,10 @@ export default function Game() {
   return (
     <>
       {SHOW_DEBUG_UI && <DebugTimeManager timeManager={timeManager} width={200} height={100} />}
-      <div className="mx-auto w-full max-w grid grid-rows-[240px_1fr] lg:grid-rows-[1fr] lg:grid-cols-[1fr_auto] lg:grow max-w-[1400px] min-h-[480px] game-frame">
+      {/* Fills everything the rail leaves. No max-width and no decorative frame:
+          the 48px border-image and the 1400px cap were spending the scarcest
+          resource here, which is pixels of world. */}
+      <div className="grid min-h-0 w-full flex-1 grid-rows-[1fr_minmax(200px,240px)] lg:grid-rows-[1fr] lg:grid-cols-[1fr_auto]">
         {/* Game area */}
         <div className="relative overflow-hidden bg-brown-900" ref={gameWrapperRef}>
           <div className="absolute inset-0">
@@ -68,7 +71,7 @@ https://github.com/michalochman/react-pixi-fiber/issues/145#issuecomment-5315492
         </div>
         {/* Right column area */}
         <div
-          className="flex flex-col overflow-y-auto shrink-0 px-4 py-6 sm:px-6 lg:w-96 xl:pr-6 border-t-8 sm:border-t-0 sm:border-l-8 border-brown-900  bg-brown-800 text-brown-100"
+          className="flex min-h-0 flex-col overflow-y-auto shrink-0 px-4 py-4 sm:px-5 lg:w-96 border-t-2 lg:border-t-0 lg:border-l-2 border-black/60 bg-brown-800 text-brown-100"
           ref={scrollViewRef}
         >
           <PlayerDetails
