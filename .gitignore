@@ -1,0 +1,29 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python (bridge, observatory)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+
+# Runtime state — never commit a running town
+.identities/
+run/
+state/
+logs/
+*.log
+
+# Experiment output: config and personas are committed, runs are not
+experiments/*/runs/
+
+# macOS
+.DS_Store
