@@ -1,0 +1,3 @@
+[submodule "headlong"]
+	path = headlong
+	url = git@github.com:laude-institute/headlong.git
