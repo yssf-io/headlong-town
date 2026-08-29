@@ -621,10 +621,31 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
 
 - `Conversation.leave()` calls `stop()` — one person leaving currently ends the
   conversation for everyone. First thing to fix in M4.
+- **`lastInput` is written once at join and never updated anywhere**, so *any*
+  player with a `human` field is evicted after `HUMAN_IDLE_TOO_LONG` no matter
+  what it does — there is no heartbeat to send. This is why the plan's "join as
+  a human player" shortcut for M1 was abandoned: a body with **no** `human`
+  field and no `Agent` record is ticked by neither loop, never evicted, and not
+  subject to `MAX_HUMAN_PLAYERS`. That is the right shape for an
+  externally-driven body anyway, so M3's `Agent.kind: 'external'` is now a
+  smaller change than planned.
+- **A body that never moves cannot finish a rendezvous.** A conversation only
+  becomes `participating` when members are within `CONVERSATION_DISTANCE` (1.3
+  tiles), and the inviter gives up after `INVITE_TIMEOUT` (60s). So even a
+  "speech only" milestone needs minimal walk-to-meet — the bridge does it
+  mechanically in M1, and it becomes the mind's decision at M2.
 - `ACTION_TIMEOUT` (120s) < monolith backoff cap (300s). Any external operation
   modelled on the existing `inProgressOperation` mechanism will time out at rest.
-- The `stop inactive worlds` cron plus `IDLE_WORLD_TIMEOUT` and
-  `useWorldHeartbeat` freeze the world when no browser is watching.
+- **The world freezes when no browser is watching, and a frozen engine
+  processes no inputs.** The `stopInactiveWorlds` cron marks any world whose
+  `lastViewed` is older than `IDLE_WORLD_TIMEOUT` (5 min) as `inactive` and
+  stops its engine. Nothing errors: inputs keep being accepted and queued, they
+  simply never get a `returnValue`, so bodies go quiet for no visible reason.
+  Hit on 2026-08-29 while debugging a body that would not walk. The bridge now
+  calls `heartbeatWorld` every 30s, which both refreshes `lastViewed` and
+  restarts an already-inactive world (it leaves `stoppedByDeveloper` alone, so
+  the freeze button still works). Removing the cron is still the right move at
+  M3 — a town with minds in it should not need a spectator.
 - `chat send` refuses `from == to`, and the responder only answers messages where
   `to == $IDENTITY_NAME`. The `town-` prefix keeps us clear of both.
 - The bridge must stamp `source:"chat"` on outbound speech; the slack bridge
