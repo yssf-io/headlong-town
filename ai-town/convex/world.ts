@@ -1,5 +1,5 @@
 import { ConvexError, v } from 'convex/values';
-import { internalMutation, mutation, query } from './_generated/server';
+import { DatabaseReader, internalMutation, mutation, query } from './_generated/server';
 import { characters } from '../data/characters';
 import { insertInput } from './aiTown/insertInput';
 import {
@@ -14,11 +14,32 @@ import { engineInsertInput } from './engine/abstractGame';
 
 export const defaultWorldStatus = query({
   handler: async (ctx) => {
-    const worldStatus = await ctx.db
+    return await defaultWorldStatusInner(ctx);
+  },
+});
+
+async function defaultWorldStatusInner(ctx: { db: DatabaseReader }) {
+  return await ctx.db
+    .query('worldStatus')
+    .filter((q) => q.eq(q.field('isDefault'), true))
+    .first();
+}
+
+// Select a world by experiment name, so several towns can run at once (PLAN.md
+// §7). With no name, falls back to the default world -- which is what keeps the
+// stock single-world setup working untouched.
+export const worldStatusForExperiment = query({
+  args: {
+    experiment: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!args.experiment) {
+      return await defaultWorldStatusInner(ctx);
+    }
+    return await ctx.db
       .query('worldStatus')
-      .filter((q) => q.eq(q.field('isDefault'), true))
+      .withIndex('experiment', (q) => q.eq('experiment', args.experiment))
       .first();
-    return worldStatus;
   },
 });
 

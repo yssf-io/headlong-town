@@ -53,12 +53,24 @@ vector index dimension must match the model, so existing rows have to go.
 |---|---|
 | Convex API | http://127.0.0.1:3210 |
 | Convex dashboard | http://127.0.0.1:6791 |
-| Town | http://127.0.0.1:5173 |
+| Town | http://localhost:5173/ai-town/ |
 
 The frontend runs on the host for a fast reload loop:
 
 ```bash
 cd ai-town && npm install && npm run dev:frontend
+```
+
+Note the URL: vite serves under `base: '/ai-town'` and binds IPv6, so it is
+**http://localhost:5173/ai-town/** — `127.0.0.1:5173` refuses the connection and
+the bare root just redirects.
+
+To watch a particular experiment, add `?experiment=<name>`; with no parameter you
+get the default world.
+
+```bash
+# seed a second town alongside the default one
+cd ai-town && npx convex run init '{"experiment":"discovery","numAgents":3}'
 ```
 
 `docker compose --profile full up` puts the frontend in a container too, at the
@@ -71,7 +83,7 @@ Milestone **M0 — scaffolding**. See PLAN.md §8 for what comes next.
 - [x] Repo, vendored ai-town, headlong submodule
 - [x] Compose stack
 - [x] Stock AI Town baseline confirmed running (OpenRouter: chat + embeddings)
-- [ ] World parameterised by experiment
+- [x] World parameterised by experiment
 
 ## Licenses
 

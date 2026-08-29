@@ -1,10 +1,11 @@
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import Button from './buttons/Button';
+import { useWorldStatus } from '../hooks/useWorldStatus';
 
 export default function FreezeButton() {
   const stopAllowed = useQuery(api.testing.stopAllowed) ?? false;
-  const defaultWorld = useQuery(api.world.defaultWorldStatus);
+  const defaultWorld = useWorldStatus();
 
   const frozen = defaultWorld?.status === 'stoppedByDeveloper';
 

@@ -12,10 +12,13 @@ import { detectMismatchedLLMProvider } from './util/llm';
 const init = mutation({
   args: {
     numAgents: v.optional(v.number()),
+    // Which experiment to seed (PLAN.md §7). Omitted = the default world, which
+    // is what `npm run predev` does and what the stock setup expects.
+    experiment: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     detectMismatchedLLMProvider();
-    const { worldStatus, engine } = await getOrCreateDefaultWorld(ctx);
+    const { worldStatus, engine } = await getOrCreateWorld(ctx, args.experiment);
     if (worldStatus.status !== 'running') {
       console.warn(
         `Engine ${engine._id} is not active! Run "npx convex run testing:resume" to restart it.`,
@@ -39,13 +42,21 @@ const init = mutation({
 });
 export default init;
 
-async function getOrCreateDefaultWorld(ctx: MutationCtx) {
+async function getOrCreateWorld(ctx: MutationCtx, experiment?: string) {
   const now = Date.now();
 
-  let worldStatus = await ctx.db
-    .query('worldStatus')
-    .filter((q) => q.eq(q.field('isDefault'), true))
-    .unique();
+  // A named experiment gets its own world; without a name we use the default
+  // one. Each world carries its own engine, and the engine is single-threaded
+  // per world, so concurrent experiments do not interfere.
+  let worldStatus = experiment
+    ? await ctx.db
+        .query('worldStatus')
+        .withIndex('experiment', (q) => q.eq('experiment', experiment))
+        .unique()
+    : await ctx.db
+        .query('worldStatus')
+        .filter((q) => q.eq(q.field('isDefault'), true))
+        .unique();
   if (worldStatus) {
     const engine = (await ctx.db.get(worldStatus.engineId))!;
     return { worldStatus, engine };
@@ -61,10 +72,13 @@ async function getOrCreateDefaultWorld(ctx: MutationCtx) {
   });
   const worldStatusId = await ctx.db.insert('worldStatus', {
     engineId: engineId,
-    isDefault: true,
+    // Only the unnamed world is the default; named experiments never steal it,
+    // or opening the app with no ?experiment= would land on an arbitrary town.
+    isDefault: !experiment,
     lastViewed: now,
     status: 'running',
     worldId: worldId,
+    experiment,
   });
   worldStatus = (await ctx.db.get(worldStatusId))!;
   await ctx.db.insert('maps', {

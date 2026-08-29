@@ -22,7 +22,14 @@ export const aiTownTables = {
     engineId: v.id('engines'),
     lastViewed: v.number(),
     status: v.union(v.literal('running'), v.literal('stoppedByDeveloper'), v.literal('inactive')),
-  }).index('worldId', ['worldId']),
+    // Which experiment this world is running (PLAN.md §7). Concurrent towns with
+    // different personas/framings are the point of the project, and the engine is
+    // already single-threaded *per world*, so they genuinely run side by side.
+    // Optional: the baseline world predates this and has no experiment name.
+    experiment: v.optional(v.string()),
+  })
+    .index('worldId', ['worldId'])
+    .index('experiment', ['experiment']),
 
   // This table contains the map data for a given world. Since it's a bit larger than the player
   // state and infrequently changes, we store it in a separate table.

@@ -9,10 +9,11 @@ import { Id } from '../../../convex/_generated/dataModel';
 import { useCallback } from 'react';
 import { waitForInput } from '../../hooks/sendInput';
 import { useServerGame } from '../../hooks/serverGame';
+import { useWorldStatus } from '../../hooks/useWorldStatus';
 
 export default function InteractButton() {
   // const { isAuthenticated } = useConvexAuth();
-  const worldStatus = useQuery(api.world.defaultWorldStatus);
+  const worldStatus = useWorldStatus();
   const worldId = worldStatus?.worldId;
   const game = useServerGame(worldId);
   const humanTokenIdentifier = useQuery(api.world.userStatus, worldId ? { worldId } : 'skip');
