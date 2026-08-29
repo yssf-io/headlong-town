@@ -35,17 +35,24 @@ echo "    wrote ai-town/.env.local"
 echo "==> pointing Convex at the LLM provider"
 # Accept either spelling: LLM_API_KEY is what ai-town's custom provider reads,
 # but OPENROUTER_API_KEY is the natural name to put in .env.
-LLM_API_KEY="${LLM_API_KEY:-${OPENROUTER_API_KEY:-}}"
-[[ -n "$LLM_API_KEY" ]] || { echo "set LLM_API_KEY or OPENROUTER_API_KEY in .env" >&2; exit 1; }
+LLM_API_KEY="${AITOWN_LLM_API_KEY:-${OPENROUTER_API_KEY:-}}"
+[[ -n "$LLM_API_KEY" ]] || { echo "set OPENROUTER_API_KEY in .env" >&2; exit 1; }
 cd ai-town
 # Clear any previous provider's vars: getLLMConfig auto-detects by which keys
 # are present, so a leftover OLLAMA_*/OPENAI_* silently wins over LLM_API_URL.
 for stale in OLLAMA_HOST OLLAMA_MODEL OLLAMA_EMBEDDING_MODEL OPENAI_API_KEY TOGETHER_API_KEY; do
     npx convex env remove "$stale" >/dev/null 2>&1 || true
 done
+# The repo .env namespaces these as AITOWN_* and we map them onto the names
+# ai-town's getLLMConfig reads. They are NOT the same vars headlong uses: both
+# systems define LLM_API_URL and mean different things by it -- ai-town treats
+# it as a base and appends /v1/chat/completions, headlong uses it verbatim as
+# the full endpoint. Headlong's thinkers read this repo's .env, so an unprefixed
+# LLM_API_URL here silently points the minds at a web page. See PLAN.md §13.
 for k in LLM_API_URL LLM_MODEL LLM_EMBEDDING_MODEL; do
-    npx convex env set "$k" "${!k:?}" >/dev/null
-    echo "    $k=${!k}"
+    src="AITOWN_$k"
+    npx convex env set "$k" "${!src:?}" >/dev/null
+    echo "    $k=${!src}"
 done
 npx convex env set LLM_API_KEY "$LLM_API_KEY" >/dev/null
 echo "    LLM_API_KEY=***"

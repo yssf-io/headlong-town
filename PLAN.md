@@ -650,6 +650,21 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
 - Headlong's `--bin` list is what generated code can actually execute. A `town`
   binary that exists on the host but is missing from `requires.bins` is invisible
   to the mind.
+- **`LLM_API_URL` means different things in the two systems, and they collide.**
+  ai-town treats it as a *base* and appends `/v1/chat/completions`
+  (`convex/util/llm.ts`); headlong uses it *verbatim* as the full endpoint
+  (`bin/llm:667`). Headlong's thinkers load `./.env` from the working directory,
+  so an unprefixed `LLM_API_URL` in this repo's `.env` points every mind at
+  `https://openrouter.ai/api` — which returns an HTML page. The failure is
+  near-silent: the responder reports "empty model output" and the HTML lands in
+  its log. `LLM_MODEL` and `LLM_API_KEY` collide the same way. Hence the repo
+  `.env` namespaces them `AITOWN_*`, and `setup-baseline.sh` maps them onto the
+  names Convex reads. Observed 2026-08-29.
+- **Sourcing an identity's `activate` bare picks the wrong model.** It falls back
+  to `${SHELLM_MODEL:-claude-opus-4-7}`, an expensive Anthropic default we have
+  no key for, and `THINK_MODEL` being already-set then beats the `.env` loading
+  inside the thinkers. Fix durably by writing `think_model=` into the identity's
+  `info.txt`, which is also where a per-identity model belongs (§11).
 - **Reasoning models silently produce empty messages in AI Town.** Ollama's
   OpenAI-compatible endpoint returns thinking in a separate `reasoning` field,
   but those tokens still count against `max_tokens` — and
