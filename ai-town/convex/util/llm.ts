@@ -4,7 +4,10 @@ const OPENAI_EMBEDDING_DIMENSION = 1536;
 const TOGETHER_EMBEDDING_DIMENSION = 768;
 const OLLAMA_EMBEDDING_DIMENSION = 1024;
 
-export const EMBEDDING_DIMENSION: number = OLLAMA_EMBEDDING_DIMENSION;
+// OpenRouter -> openai/text-embedding-3-large. Changing provider means changing
+// this constant; see ai-town/README.md "Note on changing the LLM provider".
+const OPENROUTER_EMBEDDING_DIMENSION = 3072;
+export const EMBEDDING_DIMENSION: number = OPENROUTER_EMBEDDING_DIMENSION;
 
 export function detectMismatchedLLMProvider() {
   switch (EMBEDDING_DIMENSION) {

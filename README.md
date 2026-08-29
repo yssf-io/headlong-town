@@ -36,13 +36,18 @@ git submodule update --init
 
 ## Running the stack
 
-Prerequisites: Docker, Node, and — for the current baseline only — Ollama.
+Prerequisites: Docker, Node, and an OpenRouter API key (it serves both chat and
+embeddings from one key, which is all ai-town needs).
 
 ```bash
 cp .env.example .env
-# generate a secret:  openssl rand -hex 32   → INSTANCE_SECRET
+# set INSTANCE_SECRET (openssl rand -hex 32) and OPENROUTER_API_KEY
 docker compose up -d              # Convex backend + dashboard
+./scripts/setup-baseline.sh       # admin key, provider config, deploy, seed
 ```
+
+Pass `--wipe` to `setup-baseline.sh` when changing the embedding model: the
+vector index dimension must match the model, so existing rows have to go.
 
 | | URL |
 |---|---|
@@ -65,7 +70,7 @@ Milestone **M0 — scaffolding**. See PLAN.md §8 for what comes next.
 
 - [x] Repo, vendored ai-town, headlong submodule
 - [x] Compose stack
-- [ ] Stock AI Town baseline confirmed running
+- [x] Stock AI Town baseline confirmed running (OpenRouter: chat + embeddings)
 - [ ] World parameterised by experiment
 
 ## Licenses

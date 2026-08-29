@@ -5,6 +5,9 @@
 # `docker compose down`), re-applies Convex env vars, and re-runs init.
 set -euo pipefail
 
+WIPE=0
+[[ "${1:-}" == "--wipe" ]] && WIPE=1
+
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 [[ -f .env ]] || { echo "no .env — copy .env.example and set INSTANCE_SECRET" >&2; exit 1; }
@@ -29,14 +32,30 @@ VITE_CONVEX_URL="$CONVEX_URL"
 EOL
 echo "    wrote ai-town/.env.local"
 
-echo "==> pointing Convex at Ollama"
+echo "==> pointing Convex at the LLM provider"
+# Accept either spelling: LLM_API_KEY is what ai-town's custom provider reads,
+# but OPENROUTER_API_KEY is the natural name to put in .env.
+LLM_API_KEY="${LLM_API_KEY:-${OPENROUTER_API_KEY:-}}"
+[[ -n "$LLM_API_KEY" ]] || { echo "set LLM_API_KEY or OPENROUTER_API_KEY in .env" >&2; exit 1; }
 cd ai-town
-for kv in "OLLAMA_HOST=${OLLAMA_HOST:?}" \
-          "OLLAMA_MODEL=${OLLAMA_MODEL:?}" \
-          "OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:?}"; do
-    npx convex env set "${kv%%=*}" "${kv#*=}" >/dev/null
-    echo "    ${kv%%=*}=${kv#*=}"
+# Clear any previous provider's vars: getLLMConfig auto-detects by which keys
+# are present, so a leftover OLLAMA_*/OPENAI_* silently wins over LLM_API_URL.
+for stale in OLLAMA_HOST OLLAMA_MODEL OLLAMA_EMBEDDING_MODEL OPENAI_API_KEY TOGETHER_API_KEY; do
+    npx convex env remove "$stale" >/dev/null 2>&1 || true
 done
+for k in LLM_API_URL LLM_MODEL LLM_EMBEDDING_MODEL; do
+    npx convex env set "$k" "${!k:?}" >/dev/null
+    echo "    $k=${!k}"
+done
+npx convex env set LLM_API_KEY "$LLM_API_KEY" >/dev/null
+echo "    LLM_API_KEY=***"
+
+if [[ "$WIPE" -eq 1 ]]; then
+    # Required whenever the embedding model changes: the vector index dimension
+    # must match the model, and existing rows carry the old dimension.
+    echo "==> wiping all tables (--wipe)"
+    npx convex run testing:wipeAllTables '{}' >/dev/null
+fi
 
 echo "==> deploying functions and seeding the world"
 npm run predev

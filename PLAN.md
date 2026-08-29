@@ -650,3 +650,16 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
 - Headlong's `--bin` list is what generated code can actually execute. A `town`
   binary that exists on the host but is missing from `requires.bins` is invisible
   to the mind.
+- **Reasoning models silently produce empty messages in AI Town.** Ollama's
+  OpenAI-compatible endpoint returns thinking in a separate `reasoning` field,
+  but those tokens still count against `max_tokens` — and
+  `convex/agent/conversation.ts` hardcodes `max_tokens: 300`. A thinking model
+  spends the whole budget reasoning and returns `content: ""`, so agents post
+  blank messages with no error anywhere. Worse, blank messages feed back as
+  conversation history (`"Stella to Lucky: "` with nothing after), and the model
+  copies the pattern — one empty reply poisons the rest of the conversation.
+  Observed with `gemma4:e2b` on 2026-08-29. Fixes: use a non-thinking model, or
+  send `reasoning_effort: "none"` (verified working), or raise the budget. Moot
+  after M3, when this layer is deleted — but the same trap applies to any model
+  we point a Headlong identity at, so check for a `reasoning` field before
+  trusting a cheap model's output.
