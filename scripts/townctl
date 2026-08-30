@@ -55,9 +55,9 @@ equip() {
     #    (seen: 13+ full-context calls, still climbing). The cap is the backstop.
     local envf="$dir/.env"
     if ! grep -q '^SHELLM_MAX_ITERATIONS=' "$envf" 2>/dev/null; then
-        printf 'SHELLM_MAX_ITERATIONS=%s\n' "${TOWN_MAX_ITERATIONS:-10}" >> "$envf"
+        printf 'SHELLM_MAX_ITERATIONS=%s\n' "${TOWN_MAX_ITERATIONS:-20}" >> "$envf"
         chmod 600 "$envf"
-        printf '  capped wakeups at %s iterations\n' "${TOWN_MAX_ITERATIONS:-10}"
+        printf '  capped wakeups at %s iterations\n' "${TOWN_MAX_ITERATIONS:-20}"
     fi
 
     # 4. Pin the model. Sourcing `activate` bare otherwise falls back to

@@ -679,8 +679,12 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
   the model writes `FINAL=`.** Measured over 109 consecutive runs: 107 ended
   cleanly, median 2 iterations. But the ~2% that never conclude have no ceiling
   -- one ran 13 full-context calls for a single wakeup and was still climbing.
-  Cheap on deepseek (~$0.007), unbounded on an expensive model. Capped at 10 per
-  identity by `townctl equip`. Note this is NOT shellm's first-code-block
+  Cheap on deepseek (~$0.007), unbounded on an expensive model. Capped at 20 per
+  identity by `townctl equip`: measured over 280 runs the distribution is median
+  2, p95 5, p99 10, max 13, so 20 is ~1.5x the worst legitimate run and clips
+  nothing real. A cap of 10 sat exactly on p99 and would have cut a genuine run
+  mid-`mem add`. Work appended during a run survives the cap -- only the closing
+  summary is lost. Note this is NOT shellm's first-code-block
   truncation eating the signal, which was the obvious theory and is wrong: the
   dropped-block notice goes to stderr and the model sees it next turn.
 - `ACTION_TIMEOUT` (120s) < monolith backoff cap (300s). Any external operation
