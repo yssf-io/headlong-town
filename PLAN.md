@@ -77,6 +77,18 @@ the "what upstream are we on" question answerable at a glance.
 
 ## 3. Architecture
 
+**The adapter owns delivery end to end.** Appending a step to a mind log and the
+mind reacting to it are one operation, not two hopeful ones: the bridge appends
+*and* wakes the thinker that handles it, the way headlong's dispatcher would.
+
+That was forced by a real failure (§13: the dispatcher silently stops delivering
+trajectory steps on macOS), but it is the right shape regardless — an adapter
+that depends on a component it does not control, to notice something it just
+wrote, has a liveness bug waiting in it. Double delivery is safe: the responder's
+idempotency (a stamped `reply_to`, its decision observations, a fresh
+`reply_claim`) is built for exactly this.
+
+
 ```
    ┌──────────────── per agent, isolated ────────────────┐
    │  Headlong identity "ada"                            │
@@ -680,6 +692,16 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
 - Headlong's `--bin` list is what generated code can actually execute. A `town`
   binary that exists on the host but is missing from that list is invisible to
   the mind, no matter what the skill declares.
+- **headlong's dispatcher silently stops delivering trajectory steps** (macOS,
+  bash 3.2). It stays alive, keeps ticking, keeps consuming its FIFO — and never
+  logs or dispatches another step. Every dispatcher works when fresh and dies
+  within minutes; a brand-new identity that has never touched the town fails the
+  same way, so this is inside headlong, not at the ai-town seam. Partial cause
+  proven: bash 3.2's `read -t` DISCARDS partial input on timeout, while the loop
+  explicitly assumes it is returned ("*bash then returns the partial input*").
+  That explains occasional loss but NOT the permanent silence, so the root cause
+  is still open. The bridge routes around it by waking thinkers directly (§3).
+  Worth reporting upstream with the one-line repro.
 - **Start the bridge before the mind.** `_load_env_defaults` fills in only
   variables that are *not already set*, and every thinker inherits the
   dispatcher's environment. A dispatcher started before the bridge wrote

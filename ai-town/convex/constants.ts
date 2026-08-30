@@ -30,8 +30,13 @@ export const PLAYER_CONVERSATION_COOLDOWN = 60000;
 // Invite 80% of invites that come from other agents.
 export const INVITE_ACCEPT_PROBABILITY = 0.8;
 
-// Wait for 1m for invites to be accepted.
-export const INVITE_TIMEOUT = 60000;
+// Wait for invites to be accepted. Tuned up from 60s for minds that think on
+// their own schedule: a Headlong agent perceives an invitation as an
+// observation, wakes, and decides -- which is tens of seconds even when it is
+// paying attention, and a wakeup it spends thinking about something else is a
+// legitimate outcome, not a fault. At 60s an external mind loses most
+// invitations to the clock rather than to a decision. See PLAN.md §8 (M3).
+export const INVITE_TIMEOUT = 180000;
 
 // Wait for another player to say something before jumping in.
 export const AWKWARD_CONVERSATION_TIMEOUT = 60_000; // more time locally

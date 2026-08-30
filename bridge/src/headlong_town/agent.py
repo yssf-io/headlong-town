@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,9 @@ log = logging.getLogger(__name__)
 
 # convex/constants.ts
 CONVERSATION_DISTANCE = 1.3
+
+# Don't start a fresh agentic run more often than this from perception alone.
+MONOLITH_WAKE_COOLDOWN = 30.0
 
 
 class Agent:
@@ -48,6 +52,7 @@ class Agent:
         self._conversation_id: str | None = None
         self._invited_to: str | None = None
         self._was_walking = False
+        self._last_monolith_wake = 0.0
 
     def _load_cursor(self) -> int:
         if self._cursor_file.is_file():
@@ -126,6 +131,7 @@ class Agent:
                     kind="invited",
                     who=others,
                 )
+                self._wake_monolith()
             return
 
         if kind == "walkingOver":
@@ -163,7 +169,12 @@ class Agent:
                 continue
             speaker = names.get(message["author"], message.get("authorName") or "someone")
             log.info("%s hears %s: %s", self.identity.name, speaker, text[:60])
-            self.identity.deliver_message(naming.encode(speaker), text)
+            if self.identity.deliver_message(naming.encode(speaker), text):
+                # Wake the responder ourselves rather than trusting the
+                # dispatcher to notice the step we just appended.
+                step = self.identity.last_step()
+                if step and step.get("type") == "message":
+                    self.identity.trigger("responder", step)
 
     def _walk_to_meet(self, conversation: dict[str, Any]) -> None:
         """Close the gap to whoever we agreed to talk to.
@@ -195,6 +206,23 @@ class Agent:
         if me.get("pathfinding"):
             return  # already on the way; re-issuing every tick resets the path
         self.world.move_to(self.player_id, target["position"]["x"], target["position"]["y"])
+
+    def _wake_monolith(self) -> None:
+        """Nudge the monolith after perception, without stacking runs.
+
+        A monolith wakeup is a full agentic run, so firing one per observation
+        would be both expensive and pointless -- the run reads the whole recent
+        stream anyway, so one wake covers everything that just landed. The
+        dispatcher coalesces observation triggers for the same reason; this is
+        the same policy, enforced by the adapter.
+        """
+        now = time.monotonic()
+        if now - self._last_monolith_wake < MONOLITH_WAKE_COOLDOWN:
+            return
+        self._last_monolith_wake = now
+        step = self.identity.last_step()
+        if step:
+            self.identity.trigger("monolith", step)
 
     def _notice_arrival(self) -> None:
         """Tell the mind when a walk it chose has finished.

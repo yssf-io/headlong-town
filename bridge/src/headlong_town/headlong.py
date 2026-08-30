@@ -93,6 +93,61 @@ class Identity:
             return False
         return True
 
+    def last_step(self) -> dict[str, Any] | None:
+        """The most recently appended step, as written (with its step_id)."""
+        try:
+            with self.trajectory.open("rb") as f:
+                # The tail is enough; steps are one JSON object per line.
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 262_144))
+                lines = f.read().split(b"\n")
+        except OSError:
+            return None
+        for line in reversed(lines):
+            if not line.strip():
+                continue
+            try:
+                step = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if isinstance(step, dict):
+                return step
+        return None
+
+    def trigger(self, thinker: str, step: dict[str, Any]) -> bool:
+        """Wake a thinker with a step, the way the dispatcher would.
+
+        The adapter does not rely on headlong's dispatcher noticing what we
+        appended. Delivery is our job: we append the step AND wake the thinker
+        that handles it, so a message reaching the mind log and the mind
+        reacting to it are one operation rather than two hopeful ones.
+
+        Safe to double-fire. The responder's own idempotency (a stamped
+        reply_to, its decision observations, and a fresh reply_claim) is built
+        for exactly this, so if the dispatcher also delivers the step nothing is
+        answered twice.
+        """
+        script = self.dir / "thinkers" / thinker / "step"
+        if not script.is_file():
+            log.error("no such thinker: %s", thinker)
+            return False
+        log_file = self.dir / "run" / "logs" / f"{thinker}.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        payload = shlex.quote(json.dumps(step))
+        # Detached and backgrounded: a responder run takes tens of seconds and
+        # the bridge must keep polling the town meanwhile.
+        script_q = shlex.quote(str(script))
+        log_q = shlex.quote(str(log_file))
+        result = self._run(
+            f"printf '%s' {payload} | SHELLM_LAUNCHED_BY={shlex.quote(thinker)} "
+            f"nohup {script_q} >> {log_q} 2>&1 &\ndisown 2>/dev/null || true"
+        )
+        if result.returncode != 0:
+            log.error("trigger %s failed: %s", thinker, result.stderr.strip()[:200])
+            return False
+        return True
+
     def observe(self, content: str, **town: Any) -> bool:
         """Record a world event as an observation the mind will wake on."""
         step: dict[str, Any] = {"type": "observation", "content": content, "source": "town"}
