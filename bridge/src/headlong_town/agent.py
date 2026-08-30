@@ -92,10 +92,27 @@ class Agent:
             self.player_id = self.world.find_player_id(self.identity.name)
             if self.player_id:
                 log.info("%s is now %s", self.identity.name, self.player_id)
+                # The only observation a mind gets in an empty town, so it has
+                # to carry enough to act on: where it is, how big the place is,
+                # and who else is here (PLAN.md §4).
+                m = self.world.map()
+                me = self.world.positions().get(self.player_id, {})
+                pos = me.get("position", {})
+                others = [n for p, n in self.world.player_names().items() if p != self.player_id]
+                company = (
+                    "Also here: " + ", ".join(sorted(others)) + "."
+                    if others
+                    else "There is no one else here at the moment."
+                )
                 self.identity.observe(
-                    f"You are in the town now, as a character called {self.identity.name}.",
+                    f"You have a body in the town now, a character called "
+                    f"{self.identity.name}, standing at "
+                    f"({pos.get('x', 0):.0f}, {pos.get('y', 0):.0f}). The town is "
+                    f"{m['width']} by {m['height']} tiles. {company} "
+                    f"Nothing moves you but you.",
                     kind="spawn",
                 )
+                self._wake_monolith()
         return bool(self.player_id)
 
     # -- perception -----------------------------------------------------------
