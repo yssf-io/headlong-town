@@ -358,7 +358,13 @@ export const findConversationCandidate = internalQuery({
           continue;
         }
       }
-      candidates.push({ id: otherPlayer.id, position });
+      // UPSTREAM BUG (a16z-infra/ai-town @ 8e05997): this pushed `position`,
+      // destructured from `player` above -- the INVITER's own position -- so
+      // every candidate carried identical coordinates, every distance in the
+      // sort below evaluated to 0, the comparator was a no-op, and the "nearest
+      // candidate" was really just the first entry in world order. Agents
+      // invited people anywhere on the map, then walked the whole way.
+      candidates.push({ id: otherPlayer.id, position: otherPlayer.position });
     }
 
     // Sort by distance and take the nearest candidate.

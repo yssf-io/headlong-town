@@ -655,6 +655,14 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
   tiles), and the inviter gives up after `INVITE_TIMEOUT` (60s). So even a
   "speech only" milestone needs minimal walk-to-meet — the bridge does it
   mechanically in M1, and it becomes the mind's decision at M2.
+- **Upstream ai-town picks conversation partners at random, not by distance.**
+  `findConversationCandidate` pushed the *inviter's* position onto every
+  candidate instead of the other player's, so every distance in its "sort by
+  distance and take the nearest" evaluated to 0 and it returned the first entry
+  in world order. Agents therefore invite someone anywhere on the map and then
+  walk the whole way. Fixed in our vendored copy; a one-line upstream candidate.
+  Worth knowing because it shaped behaviour we were reading as agent character:
+  invitations arriving from across the town were a bug, not sociability.
 - `ACTION_TIMEOUT` (120s) < monolith backoff cap (300s). Any external operation
   modelled on the existing `inProgressOperation` mechanism will time out at rest.
 - **The world freezes when no browser is watching, and a frozen engine
