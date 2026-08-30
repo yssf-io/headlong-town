@@ -116,6 +116,30 @@ export const agentInputs = {
       return null;
     },
   }),
+  // Take an agent out of the world. Deleting the player alone is not enough:
+  // Agent.tick looks its player up every tick and throws `Invalid player ID` if
+  // it has gone, which wedges the whole world's engine. So the agent record and
+  // the body have to go together.
+  removeAgent: inputHandler({
+    args: {
+      agentId,
+    },
+    handler: (game, now, args) => {
+      const agentId = parseGameId('agents', args.agentId);
+      const agent = game.world.agents.get(agentId);
+      if (!agent) {
+        throw new Error(`Couldn't find agent: ${agentId}`);
+      }
+      const player = game.world.players.get(agent.playerId);
+      if (player) {
+        player.leave(game, now);
+      }
+      game.world.agents.delete(agentId);
+      game.agentDescriptions.delete(agentId);
+      game.descriptionsModified = true;
+      return null;
+    },
+  }),
   createAgent: inputHandler({
     args: {
       descriptionIndex: v.number(),
