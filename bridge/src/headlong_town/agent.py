@@ -34,6 +34,10 @@ RETARGET_DISTANCE = 3.0
 
 # Don't start a fresh agentic run more often than this from perception alone.
 MONOLITH_WAKE_COOLDOWN = 30.0
+# How often to remind a stationary mind that it agreed to meet someone.
+MEET_NUDGE_COOLDOWN = 45.0
+# Someone within this many tiles is 'near you' and worth noticing.
+PROXIMITY_RANGE = 6.0
 
 
 class Agent:
@@ -57,6 +61,8 @@ class Agent:
         self._invited_to: str | None = None
         self._was_walking = False
         self._last_monolith_wake = 0.0
+        self._last_meet_nudge = 0.0
+        self._near: set[str] = set()
 
     def _load_cursor(self) -> int:
         if self._cursor_file.is_file():
@@ -101,6 +107,7 @@ class Agent:
         conversation = self.world.conversation_for(self.player_id)
 
         self._notice_arrival()
+        self._notice_proximity()
 
         if conversation is None:
             if self._conversation_id is not None:
@@ -139,7 +146,7 @@ class Agent:
             return
 
         if kind == "walkingOver":
-            self._walk_to_meet(conversation)
+            self._nudge_to_meet(conversation)
             return
 
         if kind != "participating":
@@ -180,55 +187,100 @@ class Agent:
                 if step and step.get("type") == "message":
                     self.identity.trigger("responder", step)
 
-    def _walk_to_meet(self, conversation: dict[str, Any]) -> None:
-        """Close the gap to whoever we agreed to talk to.
+    def _notice_proximity(self) -> None:
+        """Notice people coming and going.
 
-        Not optional, even though M1 is "speech only": a conversation only
-        becomes `participating` when the members are within
-        CONVERSATION_DISTANCE (1.3 tiles), and the inviting agent gives up after
-        INVITE_TIMEOUT (60s). A body that never moves is a body no one can ever
-        finish walking to -- the rendezvous just times out. So the bridge walks
-        far enough to meet, and no further; deciding *whether* to go is the
-        mind's job from M2.
+        Without this a mind's world is empty between invitations: it is never
+        told anyone is nearby, so there is never a reason to look, walk, or
+        speak first. Edge-triggered — only arrivals and departures, never a
+        standing list — so a crowd does not generate a wakeup per tick.
         """
         players = self.world.positions()
         me = players.get(self.player_id)
         if not me:
             return
+        names = self.world.player_names()
+        near = set()
+        for pid, other in players.items():
+            if pid == self.player_id or pid not in names:
+                continue
+            gap = math.dist(
+                (me["position"]["x"], me["position"]["y"]),
+                (other["position"]["x"], other["position"]["y"]),
+            )
+            if gap <= PROXIMITY_RANGE:
+                near.add(pid)
+
+        arrived = near - self._near
+        left = self._near - near
+        self._near = near
+        if not arrived and not left:
+            return
+        # Don't narrate the person we are already talking to.
+        conversation = self.world.conversation_for(self.player_id)
+        busy = set()
+        if conversation:
+            busy = {m["playerId"] for m in conversation["participants"]}
+        arrived -= busy
+        left -= busy
+        parts = []
+        if arrived:
+            who = " and ".join(sorted(names[p] for p in arrived))
+            parts.append(f"{who} {'is' if len(arrived) == 1 else 'are'} nearby now")
+        if left:
+            who = " and ".join(sorted(names[p] for p in left))
+            parts.append(f"{who} moved away")
+        if not parts:
+            return
+        self.identity.observe(
+            ". ".join(parts).capitalize() + ".", kind="proximity",
+            near=sorted(names[p] for p in near if p in names),
+        )
+        self._wake_monolith()
+
+    def _nudge_to_meet(self, conversation: dict[str, Any]) -> None:
+        """Tell the mind it needs to walk — do not walk for it.
+
+        The bridge used to close the gap itself, because an immobile body can
+        never finish a rendezvous (M1). But doing it silently meant movement was
+        never a problem she had to solve: every walk that mattered happened to
+        her, so the affordance never became real and in ~3000 steps she never
+        once moved on her own. Perception, not transport: she is told she is
+        standing still and how far away they are, and it is hers to act on. If
+        she does nothing the invitation expires, which is a legitimate outcome.
+        """
+        players = self.world.positions()
+        me = players.get(self.player_id)
+        if not me or me.get("pathfinding"):
+            return  # already walking somewhere: her decision, leave it alone
         others = [
-            players[m["playerId"]]
+            (m["playerId"], players[m["playerId"]])
             for m in conversation["participants"]
             if m["playerId"] != self.player_id and m["playerId"] in players
         ]
         if not others:
             return
-        target = others[0]
-        mine, theirs = me["position"], target["position"]
-        gap = math.dist((mine["x"], mine["y"]), (theirs["x"], theirs["y"]))
+        their_id, target = others[0]
+        gap = math.dist(
+            (me["position"]["x"], me["position"]["y"]),
+            (target["position"]["x"], target["position"]["y"]),
+        )
         if gap < CONVERSATION_DISTANCE:
             return
-
-        # Aim where ai-town's own agents aim: the MIDPOINT until close, then the
-        # person. Both parties do this, so they converge. Walking all the way to
-        # where they currently stand is a chase -- they are walking too, so you
-        # arrive where they were and have to start again. (Watched exactly that
-        # happen with Pete on 2026-08-30.)
-        if gap < MIDPOINT_THRESHOLD:
-            destination = (int(theirs["x"]), int(theirs["y"]))
-        else:
-            destination = (int((mine["x"] + theirs["x"]) / 2), int((mine["y"] + theirs["y"]) / 2))
-
-        pathfinding = me.get("pathfinding")
-        if pathfinding:
-            # Already walking: only re-issue if where we are headed has gone
-            # stale, or we re-plan every tick and never actually move.
-            current = pathfinding.get("destination") or {}
-            drift = math.dist(
-                (current.get("x", 1e9), current.get("y", 1e9)), destination
-            )
-            if drift < RETARGET_DISTANCE:
-                return
-        self.world.move_to(self.player_id, destination[0], destination[1])
+        now = time.monotonic()
+        if now - self._last_meet_nudge < MEET_NUDGE_COOLDOWN:
+            return
+        self._last_meet_nudge = now
+        who = self.world.player_names().get(their_id, "them")
+        self.identity.observe(
+            f"You agreed to talk with {who}, but you are standing still and they "
+            f"are {gap:.0f} tiles away. Nothing happens until one of you walks: "
+            f"`town goto {who}`.",
+            kind="waiting",
+            who=who,
+            distance=round(gap),
+        )
+        self._wake_monolith()
 
     def _wake_monolith(self) -> None:
         """Nudge the monolith after perception, without stacking runs.

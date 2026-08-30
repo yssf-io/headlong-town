@@ -18,6 +18,7 @@ from .control import TownRefusal
 # Anything closer than this is "right next to you"; ai-town needs 1.3 tiles to
 # let a conversation start.
 NEAR = 6.0
+CONVERSATION_DISTANCE = 1.3
 
 
 def _body(agent: Any) -> str:
@@ -51,6 +52,23 @@ def _distance(a: dict[str, Any], b: dict[str, Any]) -> float:
     return math.dist(
         (a["position"]["x"], a["position"]["y"]), (b["position"]["x"], b["position"]["y"])
     )
+
+
+def _participating(agent: Any) -> bool:
+    """True only when actually IN a conversation, not merely walking to one.
+
+    ai-town's own movePlayer refuses movement only for `participating`
+    (convex/aiTown/movement.ts). Refusing for `invited`/`walkingOver` too --
+    which this used to do -- makes it impossible to walk to a meeting you just
+    agreed to, which is exactly when a mind most needs to move.
+    """
+    conversation = agent.world.conversation_for(agent.player_id)
+    if not conversation:
+        return False
+    mine = next(
+        (m for m in conversation["participants"] if m["playerId"] == agent.player_id), None
+    )
+    return bool(mine and mine["status"]["kind"] == "participating")
 
 
 def _conversation_summary(agent: Any) -> str:
@@ -143,7 +161,7 @@ def move(agent: Any, args: dict[str, Any]) -> str:
         raise TownRefusal(
             f"({x}, {y}) is outside the town, which is {m['width']}x{m['height']}"
         )
-    if agent.world.conversation_for(me_id):
+    if _participating(agent):
         raise TownRefusal("you cannot walk off mid-conversation — `town leave` first")
     agent.world.move_to(me_id, x, y)
     return f"You start walking towards ({x}, {y}). You will notice when you arrive."
@@ -154,7 +172,7 @@ def goto(agent: Any, args: dict[str, Any]) -> str:
     name = (args.get("name") or "").strip()
     if not name:
         raise TownRefusal("goto needs a name: `town goto <person>`")
-    if agent.world.conversation_for(me_id):
+    if _participating(agent):
         raise TownRefusal("you cannot walk off mid-conversation — `town leave` first")
     found, player = _find(agent, name)
     agent.world.move_to(me_id, player["position"]["x"], player["position"]["y"])
@@ -163,7 +181,7 @@ def goto(agent: Any, args: dict[str, Any]) -> str:
 
 def wander(agent: Any, _args: dict[str, Any]) -> str:
     me_id = _body(agent)
-    if agent.world.conversation_for(me_id):
+    if _participating(agent):
         raise TownRefusal("you cannot wander off mid-conversation — `town leave` first")
     m = agent.world.map()
     x = random.randint(1, m["width"] - 2)
@@ -204,7 +222,27 @@ def accept(agent: Any, _args: dict[str, Any]) -> str:
     if mine["status"]["kind"] != "invited":
         raise TownRefusal(f"nothing to accept — {_conversation_summary(agent)}")
     agent.world.accept_invite(me_id, conversation["id"])
-    return "You accept, and start walking over to them."
+    names = agent.world.player_names()
+    others = [
+        names.get(m["playerId"], "someone")
+        for m in conversation["participants"]
+        if m["playerId"] != me_id
+    ]
+    who = others[0] if others else "them"
+    players = agent.world.positions()
+    me, them = players.get(me_id), None
+    for m in conversation["participants"]:
+        if m["playerId"] != me_id:
+            them = players.get(m["playerId"])
+            break
+    if me and them:
+        gap = _distance(me, them)
+        if gap >= CONVERSATION_DISTANCE:
+            return (
+                f"You accept. {who} is {gap:.0f} tiles away, so nothing happens "
+                f"until one of you closes the gap — `town goto {who}` to walk over."
+            )
+    return f"You accept, and you are close enough to {who} to talk."
 
 
 def decline(agent: Any, _args: dict[str, Any]) -> str:
