@@ -762,6 +762,17 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
   That explains occasional loss but NOT the permanent silence, so the root cause
   is still open. The bridge routes around it by waking thinkers directly (§3).
   Worth reporting upstream with the one-line repro.
+- **Waking thinkers directly loses the dispatcher's guarantees, and you have to
+  reimplement them.** headlong's dispatcher refuses to dispatch to a busy
+  thinker (it flags a pending re-trigger instead) and it owns the process tree
+  so `thinkers stop` can kill in-flight steps. The bridge's direct wake (§3) had
+  neither: perception every 30s started another full agentic run while the last
+  was still going, and because those runs were `nohup`/`disown`ed they were
+  orphaned from the dispatcher, so `thinkers stop --force` could not reap them.
+  Result on 2026-08-30: a dozen overlapping monolith runs, 37 concurrent shellm
+  processes, all reading the same stream. Fixed with a liveness check before
+  waking. Anything else the dispatcher guarantees is now the bridge's problem
+  too -- audit that list before adding more direct wakes.
 - **Start the bridge before the mind.** `_load_env_defaults` fills in only
   variables that are *not already set*, and every thinker inherits the
   dispatcher's environment. A dispatcher started before the bridge wrote

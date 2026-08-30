@@ -26,6 +26,7 @@ class Identity:
         self.dir = identities_dir / name
         if not (self.dir / "activate").is_file():
             raise SystemExit(f"no identity {name!r} at {self.dir}")
+        self._running: dict[str, int] = {}
         self._env = {
             **os.environ,
             "PATH": f"{repo_root/'headlong'/'bin'}:{repo_root/'headlong'/'tools'}:"
@@ -141,10 +142,36 @@ class Identity:
         log_q = shlex.quote(str(log_file))
         result = self._run(
             f"printf '%s' {payload} | SHELLM_LAUNCHED_BY={shlex.quote(thinker)} "
-            f"nohup {script_q} >> {log_q} 2>&1 &\ndisown 2>/dev/null || true"
+            f"nohup {script_q} >> {log_q} 2>&1 &\n"
+            f"echo $!\ndisown 2>/dev/null || true"
         )
         if result.returncode != 0:
             log.error("trigger %s failed: %s", thinker, result.stderr.strip()[:200])
+            return False
+        pid = (result.stdout or "").strip().split("\n")[-1]
+        if pid.isdigit():
+            self._running[thinker] = int(pid)
+        return True
+
+    def is_running(self, thinker: str) -> bool:
+        """Is a run we started for this thinker still alive?
+
+        headlong's dispatcher refuses to dispatch to a busy thinker and flags a
+        pending re-trigger instead. Waking thinkers directly (see trigger())
+        bypasses that guard, so the bridge has to keep it: without this, every
+        perception event starts ANOTHER full agentic run while the last is still
+        going. Observed 2026-08-30 with a dozen monolith runs overlapping, each
+        5-9 minutes long, all reading the same stream.
+        """
+        pid = self._running.get(thinker)
+        if not pid:
+            return False
+        try:
+            os.kill(pid, 0)
+        except (ProcessLookupError, PermissionError):
+            self._running.pop(thinker, None)
+            return False
+        except OSError:
             return False
         return True
 

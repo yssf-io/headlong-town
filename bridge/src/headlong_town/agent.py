@@ -308,6 +308,11 @@ class Agent:
         dispatcher coalesces observation triggers for the same reason; this is
         the same policy, enforced by the adapter.
         """
+        # One agentic run at a time. A monolith run reads the whole recent
+        # stream when it starts, so anything that landed while it was running is
+        # already covered -- a second concurrent run is pure duplicate cost.
+        if self.identity.is_running("monolith"):
+            return
         now = time.monotonic()
         if now - self._last_monolith_wake < MONOLITH_WAKE_COOLDOWN:
             return
