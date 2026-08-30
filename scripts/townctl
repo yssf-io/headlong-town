@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# townctl — create and equip the town's minds.
+#
+#   ./scripts/townctl equip ada        give an identity a body's worth of tooling
+#   ./scripts/townctl new ada          create the identity, then equip it
+#   ./scripts/townctl list
+#
+# `equip` is idempotent; re-run it after `identity sync-thinkers`, which can
+# restore a stock thinker lib over the patch below.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ROOT=$(pwd)
+# shellcheck disable=SC1091
+source scripts/agent-env.sh
+
+MODEL="${TOWN_THINK_MODEL:-meta-llama/llama-3.3-70b-instruct}"
+
+die() { printf 'townctl: %s\n' "$*" >&2; exit 1; }
+
+equip() {
+    local name="${1:?usage: townctl equip <name>}"
+    local dir="$TOWN_IDENTITIES/$name"
+    [[ -d "$dir" ]] || die "no identity '$name' (try: townctl new $name)"
+
+    # 1. The town skill, as a KERNEL skill. Kernel skills are injected into the
+    #    system prompt in full, and crucially reach the responder too -- which is
+    #    where the group turn-taking policy has to land. A regular skill would
+    #    only contribute its name and description. (PLAN.md §4)
+    ln -sfn "$ROOT/town" "$dir/kernel/town"
+
+    # 2. The `town` binary has to reach generated code, which runs in a Docker
+    #    sandbox, so being on the host PATH is not enough: shellm only exposes
+    #    binaries passed with --bin. Those come from a fixed list in the thinker
+    #    lib, and a skill's `requires.bins` does NOT inject them -- it is only an
+    #    eligibility check that hides the skill when the binary is missing.
+    #
+    #    The identity owns a COPY of the thinker lib (identity sync-thinkers
+    #    preserves local edits), so extending that list is per-identity
+    #    configuration rather than a headlong core edit. Upstream candidate:
+    #    have _build_shellm_flags honour requires.bins.
+    local lib="$dir/thinkers/_lib/common.sh"
+    [[ -f "$lib" ]] || die "no thinker lib at $lib"
+    if grep -q 'put sub town' "$lib"; then
+        printf '  town binary already exposed to %s\n' "$name"
+    else
+        perl -pi -e 's/(for cmd in mem traj skills context llm shellm chat glob view put sub)(; do)/$1 town$2/' "$lib"
+        grep -q 'put sub town' "$lib" || die "could not patch $lib"
+        printf '  exposed the town binary to %s\n' "$name"
+    fi
+
+    # 3. Pin the model. Sourcing `activate` bare otherwise falls back to
+    #    claude-opus-4-7, an Anthropic default we have no key for.
+    if ! grep -q '^think_model=' "$dir/info.txt"; then
+        printf 'think_model=%s\n' "$MODEL" >> "$dir/info.txt"
+        printf '  pinned think_model=%s\n' "$MODEL"
+    fi
+    printf 'equipped %s\n' "$name"
+}
+
+case "${1:-}" in
+    equip) shift; equip "$@" ;;
+    new)
+        shift
+        name="${1:?usage: townctl new <name>}"
+        town-identity new "$name"
+        equip "$name"
+        ;;
+    list) town-identity list ;;
+    *) printf 'usage: townctl {new|equip|list} [name]\n' >&2; exit 1 ;;
+esac

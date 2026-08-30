@@ -11,6 +11,7 @@ responder's reply comes back out of the mind log as a message addressed to a
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -45,6 +46,8 @@ class Agent:
         # the same conversation twice does not double-wake the responder.
         self._seen_messages: set[str] = set()
         self._conversation_id: str | None = None
+        self._invited_to: str | None = None
+        self._was_walking = False
 
     def _load_cursor(self) -> int:
         if self._cursor_file.is_file():
@@ -88,10 +91,13 @@ class Agent:
             return
         conversation = self.world.conversation_for(self.player_id)
 
+        self._notice_arrival()
+
         if conversation is None:
             if self._conversation_id is not None:
                 self.identity.observe("The conversation you were in has ended.", kind="left")
                 self._conversation_id = None
+            self._invited_to = None
             return
 
         member = next(
@@ -100,21 +106,26 @@ class Agent:
         kind = member["status"]["kind"]
 
         if kind == "invited":
-            # M1 autopilot: accept everything. Whether to talk to someone is the
-            # mind's decision from M2, once it has a `town` CLI to decide with.
-            names = self.world.player_names()
-            others = [
-                names.get(m["playerId"], "someone")
-                for m in conversation["participants"]
-                if m["playerId"] != self.player_id
-            ]
-            log.info("%s accepting invite from %s", self.identity.name, ", ".join(others))
-            self.world.accept_invite(self.player_id, conversation["id"])
-            self.identity.observe(
-                f"{' and '.join(others)} wants to talk with you, and you are walking over.",
-                kind="invited",
-                who=others,
-            )
+            # The mind decides. The bridge only tells it that it was asked --
+            # `town accept` / `town decline` are the reply. (Walking to a meeting
+            # you already agreed to stays mechanical: that is the consequence of
+            # accepting, not a second decision.)
+            if conversation["id"] != self._invited_to:
+                self._invited_to = conversation["id"]
+                names = self.world.player_names()
+                others = [
+                    names.get(m["playerId"], "someone")
+                    for m in conversation["participants"]
+                    if m["playerId"] != self.player_id
+                ]
+                who = " and ".join(others) or "someone"
+                log.info("%s was invited by %s", self.identity.name, who)
+                self.identity.observe(
+                    f"{who} wants to talk with you. You can `town accept` or "
+                    f"`town decline` — if you do nothing they will give up.",
+                    kind="invited",
+                    who=others,
+                )
             return
 
         if kind == "walkingOver":
@@ -127,6 +138,17 @@ class Agent:
         if conversation["id"] != self._conversation_id:
             self._conversation_id = conversation["id"]
             self._seen_messages.clear()
+            names = self.world.player_names()
+            others = [
+                names.get(m["playerId"], "someone")
+                for m in conversation["participants"]
+                if m["playerId"] != self.player_id
+            ]
+            self.identity.observe(
+                f"You are now close enough to talk with {' and '.join(others) or 'them'}.",
+                kind="joined",
+                who=others,
+            )
 
         names = self.world.player_names()
         for message in self.world.messages(conversation["id"]):
@@ -173,6 +195,60 @@ class Agent:
         if me.get("pathfinding"):
             return  # already on the way; re-issuing every tick resets the path
         self.world.move_to(self.player_id, target["position"]["x"], target["position"]["y"])
+
+    def _notice_arrival(self) -> None:
+        """Tell the mind when a walk it chose has finished.
+
+        Without this, `town move` is a command with no consequence the mind ever
+        sees: it would have to poll `town look` to find out whether it got there,
+        which burns a wakeup on a question the world can just answer.
+        """
+        me = self.world.positions().get(self.player_id)
+        if not me:
+            return
+        walking = bool(me.get("pathfinding"))
+        if self._was_walking and not walking:
+            x, y = me["position"]["x"], me["position"]["y"]
+            self.identity.observe(
+                f"You have stopped walking, at ({x:.0f}, {y:.0f}).", kind="arrived",
+                x=round(x), y=round(y),
+            )
+        self._was_walking = walking
+
+    def has_unanswered_inbound(self) -> bool:
+        """Is someone waiting on a reply the responder is already handling?
+
+        Guards `town say` (PLAN.md §4): the responder owns replies, and the
+        monolith speaking into the same gap talks over it. A message counts as
+        handled once a reply stamps its step_id, or the responder records a
+        deliberate no-reply against it -- exactly the facts bin/chat and the
+        responder already write into the log, so this reads the same truth they
+        do rather than keeping its own state.
+        """
+        try:
+            tail = self._traj.read_bytes()[-200_000:]
+        except OSError:
+            return False
+        inbound: list[str] = []
+        answered: set[str] = set()
+        for line in tail.split(b"\n"):
+            if not line.strip():
+                continue
+            try:
+                step = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            kind = step.get("type")
+            if kind == "message":
+                if step.get("to") == self.identity.name and naming.is_town_name(step.get("from")):
+                    if step.get("step_id"):
+                        inbound.append(step["step_id"])
+                elif step.get("from") == self.identity.name and step.get("reply_to"):
+                    answered.add(step["reply_to"])
+            elif kind == "observation" and step.get("trigger_step"):
+                if step.get("decision") in ("no-reply", "replied"):
+                    answered.add(step["trigger_step"])
+        return any(step_id not in answered for step_id in inbound)
 
     # -- speech ---------------------------------------------------------------
 

@@ -142,6 +142,20 @@ class World:
             {"playerId": player_id, "destination": {"x": int(x), "y": int(y)}},
         )
 
+    def start_conversation(self, player_id: str, invitee_id: str) -> None:
+        self.send_input("startConversation", {"playerId": player_id, "invitee": invitee_id})
+
+    def reject_invite(self, player_id: str, conversation_id: str) -> None:
+        self.send_input("rejectInvite", {"playerId": player_id, "conversationId": conversation_id})
+
+    def stop_moving(self, player_id: str) -> None:
+        # moveTo takes a null destination to mean "stop where you are".
+        self.send_input("moveTo", {"playerId": player_id, "destination": None})
+
+    def map(self) -> dict[str, Any]:
+        m = self.descriptions()["worldMap"]
+        return {"width": m["width"], "height": m["height"]}
+
     def accept_invite(self, player_id: str, conversation_id: str) -> None:
         self.send_input("acceptInvite", {"playerId": player_id, "conversationId": conversation_id})
 

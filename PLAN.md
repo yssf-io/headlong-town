@@ -345,8 +345,17 @@ Deliberately minimal — we want to keep pulling upstream.
   regular skills only appear as a name and one-line description. The group
   turn-taking policy (§4) has to reach the responder, so kernel it is.
   `identity sync-kernel` is the supported install path.
-- The `town` binary reaches generated code through the skill's
-  `metadata.shellm.requires.bins`, so `_build_shellm_flags` needs no edit.
+- **`requires.bins` does NOT expose a binary to the sandbox.** It is only an
+  eligibility check: headlong hides a skill whose binaries are missing from the
+  host PATH. Generated code runs in a Docker sandbox and can only see binaries
+  passed with shellm's `--bin`, which come from a fixed list in
+  `thinkers/_lib/common.sh`. The identity owns a *copy* of that lib (and
+  `identity sync-thinkers` preserves local edits), so `scripts/townctl equip`
+  extends the list there — per-identity configuration, not a core edit. Upstream
+  candidate: have `_build_shellm_flags` honour `requires.bins`.
+- Skill-declared env vars use `requires.env`, not `requires.vars`
+  (`collect_skill_vars` greps for `env:`). A wrong key fails silently — the
+  variable simply never arrives.
 - Personas, which live in `experiments/<name>/personas/`.
 
 If those hold, headlong stays a clean upstream pin. Anything beyond them: fork,
@@ -669,8 +678,18 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
 - `identity new` seeds `chat/.chatrc` with `default_send_from`; `chat send` dies
   without a sender name. Per-identity, not per-directory (see headlong's AGENTS.md).
 - Headlong's `--bin` list is what generated code can actually execute. A `town`
-  binary that exists on the host but is missing from `requires.bins` is invisible
-  to the mind.
+  binary that exists on the host but is missing from that list is invisible to
+  the mind, no matter what the skill declares.
+- **Start the bridge before the mind.** `_load_env_defaults` fills in only
+  variables that are *not already set*, and every thinker inherits the
+  dispatcher's environment. A dispatcher started before the bridge wrote
+  `TOWN_URL` pins the stale value for the life of the dispatcher, and no amount
+  of rewriting `.env` changes it — restarting the dispatcher is the only fix.
+  Cost us a debugging cycle on 2026-08-30.
+- **A mind's generated code runs in a Docker sandbox, so `127.0.0.1` is the
+  container's loopback, not the host.** Anything the mind must reach lives at
+  `host.docker.internal`, and a control plane bound to host loopback is
+  invisible to the only caller that matters.
 - **`LLM_API_URL` means different things in the two systems, and they collide.**
   ai-town treats it as a *base* and appends `/v1/chat/completions`
   (`convex/util/llm.ts`); headlong uses it *verbatim* as the full endpoint

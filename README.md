@@ -1,7 +1,7 @@
 # headlong-town
 
 Multiple persistent [Headlong](https://github.com/laude-institute/headlong)
-agents living together in an [AI Town](https://github.com/a16z-infra/ai-town)
+agents living together in a modified [AI Town](https://github.com/a16z-infra/ai-town)
 world.
 
 **AI Town is the city and the body. Headlong is the mind.**
@@ -49,11 +49,11 @@ docker compose up -d              # Convex backend + dashboard
 Pass `--wipe` to `setup-baseline.sh` when changing the embedding model: the
 vector index dimension must match the model, so existing rows have to go.
 
-| | URL |
-|---|---|
-| Convex API | http://127.0.0.1:3210 |
-| Convex dashboard | http://127.0.0.1:6791 |
-| Town | http://localhost:5173/ai-town/ |
+|                  | URL                            |
+| ---------------- | ------------------------------ |
+| Convex API       | http://127.0.0.1:3210          |
+| Convex dashboard | http://127.0.0.1:6791          |
+| Town             | http://localhost:5173/ai-town/ |
 
 The frontend runs on the host for a fast reload loop:
 

@@ -18,7 +18,7 @@ _town_root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 
 export HEADLONG_HOME="$_town_root/state/headlong"
 export TOWN_IDENTITIES="$_town_root/state/identities"
-export PATH="$_town_root/headlong/bin:$_town_root/headlong/tools:$PATH"
+export PATH="$_town_root/town:$_town_root/headlong/bin:$_town_root/headlong/tools:$PATH"
 
 mkdir -p "$HEADLONG_HOME" "$TOWN_IDENTITIES"
 

@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# town — act in the town. One subcommand, one thing that happens in the world.
+#
+# Reads TOWN_URL and TOWN_TOKEN from the environment (the bridge writes them
+# into the identity's .env). Every call is one HTTP request to the bridge, which
+# turns it into an engine input; the bridge knows which character you are, so
+# there is no player id to pass or get wrong.
+set -uo pipefail
+
+: "${TOWN_URL:=http://127.0.0.1:8081}"
+
+die() { printf 'town: %s\n' "$*" >&2; exit 1; }
+
+[[ -n "${TOWN_TOKEN:-}" ]] || die "TOWN_TOKEN is not set — the bridge is not running, or this shell has no town access."
+
+usage() {
+    cat <<'EOF'
+town — act in the town
+
+Looking around:
+  town look                  where you are, who is near, what you are doing
+  town who                   everyone in the town and how far away they are
+  town map                   how big the town is
+
+Moving (you cannot move while in a conversation):
+  town move <x> <y>          walk to a spot
+  town goto <person>         walk to a person
+  town wander                walk somewhere at random
+  town stop                  stop walking
+
+Talking:
+  town talk-to <person>      ask someone to talk
+  town accept                accept an invitation to talk
+  town decline               decline one
+  town say <message>         say something in your conversation
+  town leave                 leave your conversation
+
+Nothing here blocks: you start walking, and you notice when you arrive.
+EOF
+    exit 0
+}
+
+# The same env has to work in two places: inside a mind's Docker sandbox, where
+# the bridge is host.docker.internal, and on the host, where it is 127.0.0.1.
+# Rather than make that someone's job to configure, try the other one.
+_alt_url() {
+    case "$TOWN_URL" in
+        *host.docker.internal*) printf '%s' "${TOWN_URL/host.docker.internal/127.0.0.1}" ;;
+        *127.0.0.1*)            printf '%s' "${TOWN_URL/127.0.0.1/host.docker.internal}" ;;
+        *)                      printf '' ;;
+    esac
+}
+
+# call <command> [json-body]
+call() {
+    local command="$1" body="${2:-}" response http status url
+    [[ -n "$body" ]] || body='{}'
+    url="$TOWN_URL"
+    response=$(curl -sS --max-time 20 -w '\n%{http_code}' \
+        -H "Authorization: Bearer $TOWN_TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d "$body" \
+        "$url/$command" 2>&1)
+    if [[ $? -ne 0 ]]; then
+        url=$(_alt_url)
+        [[ -n "$url" ]] || die "cannot reach the town at $TOWN_URL"
+        response=$(curl -sS --max-time 20 -w '\n%{http_code}' \
+            -H "Authorization: Bearer $TOWN_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "$body" \
+            "$url/$command" 2>&1) || die "cannot reach the town at $TOWN_URL or $url"
+    fi
+    status=$(printf '%s' "$response" | tail -n1)
+    http=$(printf '%s' "$response" | sed '$d')
+    local text
+    text=$(printf '%s' "$http" | jq -r '.text // .error // empty' 2>/dev/null)
+    [[ -z "$text" ]] && text="$http"
+    printf '%s\n' "$text"
+    # A refusal is information, not a crash: exit 1 so `set -e` callers notice,
+    # but the reason has already been printed in plain words.
+    [[ "$status" == "200" ]] || return 1
+    return 0
+}
+
+json_str() { printf '%s' "$1" | jq -Rs .; }
+
+cmd="${1:-}"; [[ $# -gt 0 ]] && shift
+case "$cmd" in
+    look|who|map|stop|accept|decline|leave) call "$cmd" ;;
+    move)
+        [[ $# -ge 2 ]] || die "usage: town move <x> <y>"
+        call move "$(jq -nc --argjson x "$1" --argjson y "$2" '{x:$x,y:$y}')" ;;
+    goto|talk-to)
+        [[ $# -ge 1 ]] || die "usage: town $cmd <person>"
+        call "$cmd" "$(jq -nc --arg name "$1" '{name:$name}')" ;;
+    wander) call wander ;;
+    say)
+        local_text="$*"
+        [[ -n "$local_text" ]] || { [[ ! -t 0 ]] && local_text=$(cat); }
+        [[ -n "$local_text" ]] || die "usage: town say <message>"
+        call say "$(jq -nc --arg text "$local_text" '{text:$text}')" ;;
+    -h|--help|help|"") usage ;;
+    *) die "no such command: $cmd (try: town --help)" ;;
+esac
