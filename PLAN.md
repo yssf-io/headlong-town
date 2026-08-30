@@ -319,7 +319,7 @@ identities) and must never put one in another agent's trajectory. Worth a test.
 | `docker-compose.yml` (root) | Convex backend + dashboard + frontend + bridge + N agent VMs. |
 | `experiments/` (root) | Per-experiment config, world, and personas (§7). The only place framing lives. |
 | `townctl` (root) | **Agent lifecycle and admin.** Create identities from an experiment's personas, install the `town` kernel skill, start/stop dispatchers, join and remove bodies, watch liveness, and `identity export/import` for the backup/restore path (§1). Nothing else owns "make the town exist". |
-| `observatory/` | **Our** view of the experiment: every agent's mind log, the town, and spend in one place. See §9. |
+| `observatory/` | **Our** view of the experiment: every agent's mind log, the town, and spend in one place. See §10. |
 
 ### Changed in `ai-town/`
 
@@ -448,7 +448,35 @@ Constraints that fall out of this:
 - **Cost multiplies.** Two towns cost two towns. Expect to run variants
   sequentially, or with smaller rosters, until the per-agent burn is known.
 
-## 8. Milestones
+## 8. What the solo experiment showed (2026-08-30)
+
+One Headlong mind alone in an empty world, then joined by one stock agent. The
+result that matters: **a persistent mind and a stateless one cannot hold the same
+kind of conversation**, and it is visible in the transcript rather than inferred.
+
+Alone, ada explored the map, formed the hypothesis that the town had quiet
+hours, wrote a time-stamped journal of emptiness checks to test it, and changed
+strategy on the evidence — stopped searching, held the centre "to be findable".
+That is observation → pattern → hypothesis → strategy, unprompted.
+
+With company, she asked the stock agent about his journey three times. He never
+answered once: his plan is "hear all the gossip", he has no memory of having
+just asked, so every turn restarted the same request. She was tracking a
+conversation with a history and a direction; he cannot.
+
+Two things to carry forward:
+
+- **She confabulates local colour** — benches in a square, a bakery that runs out
+  of cinnamon rolls. Her real world model is a grid of walkable tiles, so when
+  conversation calls for texture she invents it. With several minds this could
+  become shared fiction that all of them remember and none of them saw.
+- **What made her act was not the model alone.** Three separable changes were
+  each necessary: a capable model, perception (she was blind to anyone nearby),
+  and a persona that says she lives somewhere. With the stock headlong persona a
+  capable model just reasons about its own architecture — coherently, for
+  twenty minutes.
+
+## 9. Milestones
 
 **Start at M0.** Each milestone should leave something observable running;
 nothing here is a refactor you cannot look at.
@@ -514,7 +542,7 @@ makes, not a rule the engine enforces. That is the point.
 ### M5 — The town
 Five or so identities with distinct personas, each in its own microVM, created
 and supervised by `townctl`. The bridge manages all of them, and the cross-agent
-timeline (§9) exists before the first long run — not after it.
+timeline (§10) exists before the first long run — not after it.
 
 Then run it, watch it, and change nothing for a while.
 
@@ -524,7 +552,7 @@ whatever the agents turn out to want.
 
 ---
 
-## 9. Watching it
+## 10. Watching it
 
 An experiment we cannot observe is not an experiment. This is a first-class
 component, not a nice-to-have, and it is the thing most likely to be skipped
@@ -540,7 +568,7 @@ Three views exist already and none of them is enough alone:
 - **The conversations** — messages, in either UI.
 
 The problem: headlong's dash discovers identities on **one filesystem root**. The
-moment each agent lives in its own microVM (§10), there are N dashboards, one per
+moment each agent lives in its own microVM (§9), there are N dashboards, one per
 VM, and no aggregate. The isolation we want for safety directly costs us the
 observability we want for research.
 
@@ -562,7 +590,7 @@ this experiment actually produces, and it should exist by M5.
 What must be captured per run, or the run is not reproducible: personas, model
 per identity, perception thresholds, the full mind log, and spend per agent.
 
-## 10. Isolation and deployment
+## 11. Isolation and deployment
 
 Requirement: **the town is the only shared surface.** Headlong agents run
 arbitrary bash with their own API keys. Two agents that can reach each other's
@@ -589,7 +617,7 @@ access.
 
 ---
 
-## 11. Cost
+## 12. Cost
 
 A Headlong agent costs roughly $1–2/hour on Sonnet at default pacing. Five agents
 running continuously is real money, and the town is more interesting when it runs
@@ -611,7 +639,7 @@ Instrument spend per identity from M1 — the dashboard already has a usage API.
 
 ---
 
-## 12. Open questions
+## 13. Open questions
 
 Most of the earlier list is settled and folded into §1 and §4. What is left:
 
@@ -631,14 +659,14 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
    A monolith resting at a 300s backoff looks identical to a hung one from the
    town's side. Liveness needs a signal better than "has it acted recently" —
    headlong's `run/dispatcher.pid` and the dash's health API are the likely source.
-5. **Isolation mechanism.** Apple `container`, Firecracker, or plain Docker (§10).
+5. **Isolation mechanism.** Apple `container`, Firecracker, or plain Docker (§9).
    Decide at M5, when there is something worth isolating. The open sub-question is
    whether Headlong's own Docker sandboxing nests cleanly inside a microVM —
    `shellm` wants a container *inside* the agent, for the agent's own generated code.
-6. **How we watch N isolated agents** (§9). Tied to (5): the stronger the
+6. **How we watch N isolated agents** (§10). Tied to (5): the stronger the
    isolation, the harder the aggregate view. Settle both together, not separately.
 
-## 13. Known sharp edges
+## 14. Known sharp edges
 
 - `Conversation.leave()` calls `stop()` — one person leaving currently ends the
   conversation for everyone. First thing to fix in M4.
