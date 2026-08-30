@@ -675,6 +675,14 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
   observations.** A mind paraphrases what it did ("Started wandering toward
   (7,8)") rather than echoing the CLI's reply, so grepping observations for
   command output undercounts action to zero. The inputs table is ground truth.
+- **`SHELLM_MAX_ITERATIONS` defaults to unlimited, and a wakeup ends only when
+  the model writes `FINAL=`.** Measured over 109 consecutive runs: 107 ended
+  cleanly, median 2 iterations. But the ~2% that never conclude have no ceiling
+  -- one ran 13 full-context calls for a single wakeup and was still climbing.
+  Cheap on deepseek (~$0.007), unbounded on an expensive model. Capped at 10 per
+  identity by `townctl equip`. Note this is NOT shellm's first-code-block
+  truncation eating the signal, which was the obvious theory and is wrong: the
+  dropped-block notice goes to stderr and the model sees it next turn.
 - `ACTION_TIMEOUT` (120s) < monolith backoff cap (300s). Any external operation
   modelled on the existing `inProgressOperation` mechanism will time out at rest.
 - **The world freezes when no browser is watching, and a frozen engine

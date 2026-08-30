@@ -48,7 +48,19 @@ equip() {
         printf '  exposed the town binary to %s\n' "$name"
     fi
 
-    # 3. Pin the model. Sourcing `activate` bare otherwise falls back to
+    # 3. Cap a wakeup. A monolith wakeup is one function: pick it, do it, append
+    #    a step, stop. shellm's loop ends only when the model writes FINAL=...,
+    #    and SHELLM_MAX_ITERATIONS defaults to unlimited -- so a model that never
+    #    emits the signal turns one wakeup into an unbounded exploration session
+    #    (seen: 13+ full-context calls, still climbing). The cap is the backstop.
+    local envf="$dir/.env"
+    if ! grep -q '^SHELLM_MAX_ITERATIONS=' "$envf" 2>/dev/null; then
+        printf 'SHELLM_MAX_ITERATIONS=%s\n' "${TOWN_MAX_ITERATIONS:-10}" >> "$envf"
+        chmod 600 "$envf"
+        printf '  capped wakeups at %s iterations\n' "${TOWN_MAX_ITERATIONS:-10}"
+    fi
+
+    # 4. Pin the model. Sourcing `activate` bare otherwise falls back to
     #    claude-opus-4-7, an Anthropic default we have no key for.
     if ! grep -q '^think_model=' "$dir/info.txt"; then
         printf 'think_model=%s\n' "$MODEL" >> "$dir/info.txt"
