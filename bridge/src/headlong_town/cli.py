@@ -143,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 agent.poll_town()
                 agent.poll_mind()
+                agent.tick_spontaneity()
             except ConvexError as exc:
                 # A backend blip must not kill the bridge; the next tick retries.
                 log.warning("convex: %s", exc)

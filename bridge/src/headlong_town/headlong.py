@@ -164,16 +164,27 @@ class Identity:
         5-9 minutes long, all reading the same stream.
         """
         pid = self._running.get(thinker)
-        if not pid:
-            return False
-        try:
-            os.kill(pid, 0)
-        except (ProcessLookupError, PermissionError):
-            self._running.pop(thinker, None)
-            return False
-        except OSError:
-            return False
-        return True
+        if pid:
+            try:
+                os.kill(pid, 0)
+                return True
+            except (ProcessLookupError, PermissionError):
+                self._running.pop(thinker, None)
+            except OSError:
+                return True
+
+        # Our own PIDs are not enough: headlong's dispatcher ALSO wakes the
+        # monolith on its spontaneity timer, and it knows nothing about the runs
+        # we start. Two sources racing means two shellm runs, which race to
+        # create the identity's docker env -- leaving two containers and an empty
+        # container_id, after which every run dies with "Env <name> was created
+        # without a mount for this run's workdir". So ask the system instead:
+        # is ANY shellm run alive for this identity, whoever started it?
+        probe = subprocess.run(
+            ["pgrep", "-f", f"shellm.*{self.dir}"],
+            capture_output=True, text=True,
+        )
+        return probe.returncode == 0 and bool(probe.stdout.strip())
 
     def observe(self, content: str, **town: Any) -> bool:
         """Record a world event as an observation the mind will wake on."""

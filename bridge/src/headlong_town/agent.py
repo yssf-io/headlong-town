@@ -36,6 +36,8 @@ RETARGET_DISTANCE = 3.0
 MONOLITH_WAKE_COOLDOWN = 30.0
 # How often to remind a stationary mind that it agreed to meet someone.
 MEET_NUDGE_COOLDOWN = 45.0
+# How long a quiet mind waits before thinking on its own again.
+SPONTANEITY_INTERVAL = 90.0
 # Someone within this many tiles is 'near you' and worth noticing.
 PROXIMITY_RANGE = 6.0
 
@@ -62,6 +64,7 @@ class Agent:
         self._was_walking = False
         self._last_monolith_wake = 0.0
         self._last_meet_nudge = 0.0
+        self._idle_since = time.monotonic()
         self._near: set[str] = set()
 
     def _load_cursor(self) -> int:
@@ -298,6 +301,27 @@ class Agent:
             distance=round(gap),
         )
         self._wake_monolith()
+
+    def tick_spontaneity(self) -> None:
+        """Wake the monolith when nothing has happened for a while.
+
+        The bridge owns monolith wakes outright. Two independent wake sources
+        (headlong's dispatcher timer and the bridge's perception) raced: both
+        started a shellm run, the runs raced to create the identity's docker
+        env, and the loser left two containers and an empty container_id --
+        after which every subsequent run died with "Env <name> was created
+        without a mount for this run's workdir". A guard on one side cannot fix
+        a two-source race, so the monolith is not started under the dispatcher
+        at all and this is its only clock.
+        """
+        if self.identity.is_running("monolith"):
+            self._idle_since = time.monotonic()
+            return
+        if time.monotonic() - self._idle_since < SPONTANEITY_INTERVAL:
+            return
+        self._idle_since = time.monotonic()
+        step = self.identity.last_step() or {"type": "monolith-wake", "source": "town"}
+        self.identity.trigger("monolith", step)
 
     def _wake_monolith(self) -> None:
         """Nudge the monolith after perception, without stacking runs.
