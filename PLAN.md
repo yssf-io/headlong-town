@@ -663,6 +663,18 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
   walk the whole way. Fixed in our vendored copy; a one-line upstream candidate.
   Worth knowing because it shaped behaviour we were reading as agent character:
   invitations arriving from across the town were a bug, not sociability.
+- **`PATHFINDING_TIMEOUT` (60s) is shorter than a walk across the map.** A
+  64x48 town takes longer than a minute to cross, so a long walk is cut off
+  about two-thirds of the way and the walker is left standing wherever the clock
+  ran out. Stock agents never hit it because they wander to nearby points; a
+  mind that decides to go somewhere specific hits it every time. Raised to 5min.
+- **`traj cat` can return stale output on a large log.** It returned steps 20
+  minutes old while the raw file held current ones. When measuring what a mind
+  just did, read `trajectory.jsonl` directly.
+- **Measure what a mind DID from the engine's `inputs` table, not from its own
+  observations.** A mind paraphrases what it did ("Started wandering toward
+  (7,8)") rather than echoing the CLI's reply, so grepping observations for
+  command output undercounts action to zero. The inputs table is ground truth.
 - `ACTION_TIMEOUT` (120s) < monolith backoff cap (300s). Any external operation
   modelled on the existing `inProgressOperation` mechanism will time out at rest.
 - **The world freezes when no browser is watching, and a frozen engine

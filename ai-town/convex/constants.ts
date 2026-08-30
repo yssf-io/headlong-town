@@ -8,7 +8,12 @@ export const MAX_STEP = 10 * 60 * 1000;
 export const TICK = 16;
 export const STEP_INTERVAL = 1000;
 
-export const PATHFINDING_TIMEOUT = 60 * 1000;
+// Long enough to actually cross the map. At 60s a walk from one edge of a
+// 64x48 town to the other is cut off about two-thirds of the way, and the
+// walker is left standing wherever the clock ran out -- ada hit this on three
+// consecutive legs while crossing to the centre. Stock agents never noticed
+// because they wander to nearby points.
+export const PATHFINDING_TIMEOUT = 5 * 60 * 1000;
 export const PATHFINDING_BACKOFF = 1000;
 export const CONVERSATION_DISTANCE = 1.3;
 export const MIDPOINT_THRESHOLD = 4;
