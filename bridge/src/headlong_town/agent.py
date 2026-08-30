@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 import uuid
 from pathlib import Path
@@ -27,6 +28,9 @@ log = logging.getLogger(__name__)
 
 # convex/constants.ts
 CONVERSATION_DISTANCE = 1.3
+MIDPOINT_THRESHOLD = 4.0
+# Re-aim only when the target has drifted this far from where we are headed.
+RETARGET_DISTANCE = 3.0
 
 # Don't start a fresh agentic run more often than this from perception alone.
 MONOLITH_WAKE_COOLDOWN = 30.0
@@ -199,13 +203,32 @@ class Agent:
         if not others:
             return
         target = others[0]
-        dx = target["position"]["x"] - me["position"]["x"]
-        dy = target["position"]["y"] - me["position"]["y"]
-        if (dx * dx + dy * dy) ** 0.5 < CONVERSATION_DISTANCE:
+        mine, theirs = me["position"], target["position"]
+        gap = math.dist((mine["x"], mine["y"]), (theirs["x"], theirs["y"]))
+        if gap < CONVERSATION_DISTANCE:
             return
-        if me.get("pathfinding"):
-            return  # already on the way; re-issuing every tick resets the path
-        self.world.move_to(self.player_id, target["position"]["x"], target["position"]["y"])
+
+        # Aim where ai-town's own agents aim: the MIDPOINT until close, then the
+        # person. Both parties do this, so they converge. Walking all the way to
+        # where they currently stand is a chase -- they are walking too, so you
+        # arrive where they were and have to start again. (Watched exactly that
+        # happen with Pete on 2026-08-30.)
+        if gap < MIDPOINT_THRESHOLD:
+            destination = (int(theirs["x"]), int(theirs["y"]))
+        else:
+            destination = (int((mine["x"] + theirs["x"]) / 2), int((mine["y"] + theirs["y"]) / 2))
+
+        pathfinding = me.get("pathfinding")
+        if pathfinding:
+            # Already walking: only re-issue if where we are headed has gone
+            # stale, or we re-plan every tick and never actually move.
+            current = pathfinding.get("destination") or {}
+            drift = math.dist(
+                (current.get("x", 1e9), current.get("y", 1e9)), destination
+            )
+            if drift < RETARGET_DISTANCE:
+                return
+        self.world.move_to(self.player_id, destination[0], destination[1])
 
     def _wake_monolith(self) -> None:
         """Nudge the monolith after perception, without stacking runs.
