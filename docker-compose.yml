@@ -43,7 +43,11 @@ services:
       - 'host.docker.internal:host-gateway'
     networks: [town]
 
+  # Convex's own admin dashboard. Behind a profile because the image is 1.24GB
+  # and we have barely used it -- on a small box that is memory better spent on
+  # the town. Bring it up with: docker compose --profile admin up -d
   dashboard:
+    profiles: [admin]
     image: ghcr.io/get-convex/convex-dashboard:latest
     ports:
       - '${DASHBOARD_PORT:-6791}:6791'
