@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import platform
 import secrets
+import subprocess
 import signal
 import sys
 import time
@@ -40,6 +42,33 @@ def _ensure_token(state_dir: Path) -> str:
     return token
 
 
+def _sandbox_host() -> str:
+    """How a mind's Docker sandbox reaches this host.
+
+    `host.docker.internal` is a Docker Desktop convenience and does NOT resolve
+    on Linux, where the host is the bridge network's gateway instead. Getting
+    this wrong is quiet: the mind simply reports the town unreachable and
+    carries on without a body it can act through.
+
+    On Linux the gateway also has to be allowed through the firewall --
+    `ufw allow from <docker subnet> to any port <port> proto tcp`.
+    """
+    if platform.system() != "Linux":
+        return "host.docker.internal"
+    try:
+        out = subprocess.run(
+            ["docker", "network", "inspect", "bridge",
+             "-f", "{{range .IPAM.Config}}{{.Gateway}}{{end}}"],
+            capture_output=True, text=True, timeout=10,
+        )
+        gateway = out.stdout.strip()
+        if gateway:
+            return gateway
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "172.17.0.1"  # Docker's default bridge gateway
+
+
 def _install_town_env(identity: Identity, token: str, port: int) -> None:
     """Give the mind's shell what `town` needs.
 
@@ -49,9 +78,7 @@ def _install_town_env(identity: Identity, token: str, port: int) -> None:
     """
     env_file = identity.dir / ".env"
     wanted = {
-        # The mind's shell runs inside a Docker sandbox, where the host is
-        # host.docker.internal. The CLI falls back to loopback for host use.
-        "TOWN_URL": f"http://host.docker.internal:{port}",
+        "TOWN_URL": f"http://{_sandbox_host()}:{port}",
         "TOWN_TOKEN": token,
     }
     existing: dict[str, str] = {}

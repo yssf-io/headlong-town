@@ -44,10 +44,15 @@ EOF
 # the bridge is host.docker.internal, and on the host, where it is 127.0.0.1.
 # Rather than make that someone's job to configure, try the other one.
 _alt_url() {
+    # host.docker.internal is Docker Desktop only; on Linux the host is the
+    # bridge gateway. Try the other view of the same address before giving up.
     case "$TOWN_URL" in
         *host.docker.internal*) printf '%s' "${TOWN_URL/host.docker.internal/127.0.0.1}" ;;
         *127.0.0.1*)            printf '%s' "${TOWN_URL/127.0.0.1/host.docker.internal}" ;;
-        *)                      printf '' ;;
+        *)
+            # A gateway address (Linux): loopback is the useful fallback when
+            # the CLI is run on the host rather than inside a sandbox.
+            printf '%s' "$(printf '%s' "$TOWN_URL" | sed -E 's#//[0-9.]+:#//127.0.0.1:#')" ;;
     esac
 }
 

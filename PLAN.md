@@ -779,6 +779,18 @@ Most of the earlier list is settled and folded into §1 and §4. What is left:
   `TOWN_URL` pins the stale value for the life of the dispatcher, and no amount
   of rewriting `.env` changes it — restarting the dispatcher is the only fix.
   Cost us a debugging cycle on 2026-08-30.
+- **`host.docker.internal` does not exist on Linux.** It is a Docker Desktop
+  convenience. On Linux the host is the bridge network's gateway (172.17.0.1 by
+  default), *and* a host firewall will block it: ufw denies the docker subnet
+  until you `ufw allow from <subnet> to any port <port> proto tcp`. Both
+  failures are quiet -- the mind just reports the town unreachable and carries
+  on bodiless. The bridge now derives the address per platform. Hit on the first
+  VPS boot, 2026-08-31.
+- **`identity export` drops dangling symlinks**, and a linked persona or kernel
+  skill becomes dangling the moment the repo path changes. Ada arrived on the
+  VPS with no `core_identity_prompt.md` and no `town` kernel skill -- she would
+  have reverted to stock headlong behaviour, silently. Re-run
+  `townctl equip <name>` and relink the persona after any import.
 - **A mind's generated code runs in a Docker sandbox, so `127.0.0.1` is the
   container's loopback, not the host.** Anything the mind must reach lives at
   `host.docker.internal`, and a control plane bound to host loopback is
