@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# experiment — run a town from a declarative spec.
+#
+#   ./scripts/experiment up     <name>
+#   ./scripts/experiment status <name>
+#   ./scripts/experiment down   <name>
+#
+# A spec lives in experiments/<name>/ (gitignored — it is your research data,
+# not part of the software). Copy experiments.example/ to start one.
+#
+# `up` is idempotent: it creates only what is missing, so re-running it after
+# editing a spec adds the new minds and leaves existing ones, with their
+# memories, alone.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+ROOT=$(pwd)
+# shellcheck disable=SC1091
+source scripts/agent-env.sh
+
+CMD="${1:-}"; NAME="${2:-}"
+[[ -n "$CMD" && -n "$NAME" ]] || { sed -n '2,12p' "$0" | sed 's/^# \?//'; exit 1; }
+SPEC="$ROOT/experiments/$NAME"
+[[ -d "$SPEC" ]] || { echo "no experiment at $SPEC (copy experiments.example/)" >&2; exit 1; }
+
+py() { PYTHONPATH="$ROOT/bridge/src" python3 "$@"; }
+
+# Read one field out of the spec, so bash never parses TOML itself.
+spec_field() {
+    py - "$SPEC" "$1" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]).parents[1] / "bridge/src"))
+from headlong_town import config
+try:
+    e = config.load(Path(sys.argv[1]))
+except config.ExperimentError as exc:
+    print(f"SPEC ERROR: {exc}", file=sys.stderr); sys.exit(1)
+field = sys.argv[2]
+if field == "minds":       print("\n".join(m.name for m in e.minds))
+elif field == "personas":  print("\n".join(f"{m.name}\t{m.persona or ''}" for m in e.minds))
+elif field == "models":    print("\n".join(f"{m.name}\t{m.model}" for m in e.minds))
+elif field == "stock":     print("\n".join(e.stock_agents))
+else:                      print(getattr(e, field, ""))
+PY
+}
+
+case "$CMD" in
+up)
+    MINDS=$(spec_field minds) || exit 1
+    STOCK=$(spec_field stock)
+    ITERS=$(spec_field max_iterations)
+    echo "==> experiment '$NAME': $(spec_field description)"
+    echo "    minds:        $(echo "$MINDS" | tr '\n' ' ')"
+    echo "    stock agents: ${STOCK:-(none)}"
+
+    echo "==> world"
+    (cd ai-town && npx convex run init "{\"experiment\":\"$NAME\",\"numAgents\":0}" >/dev/null 2>&1) \
+        && echo "    seeded/exists"
+    WORLD=$(curl -sS --max-time 15 http://127.0.0.1:3210/api/query -H 'Content-Type: application/json' \
+        -d "{\"path\":\"world:worldStatusForExperiment\",\"args\":{\"experiment\":\"$NAME\"},\"format\":\"json\"}" \
+        | py -c 'import sys,json; v=json.load(sys.stdin).get("value") or {}; print(v.get("worldId",""))')
+    [[ -n "$WORLD" ]] || { echo "    could not resolve the world" >&2; exit 1; }
+    ENGINE=$(curl -sS --max-time 15 http://127.0.0.1:3210/api/query -H 'Content-Type: application/json' \
+        -d "{\"path\":\"world:worldStatusForExperiment\",\"args\":{\"experiment\":\"$NAME\"},\"format\":\"json\"}" \
+        | py -c 'import sys,json; print((json.load(sys.stdin).get("value") or {}).get("engineId",""))')
+    echo "    world $WORLD"
+
+    echo "==> minds"
+    while IFS=$'\t' read -r mind persona; do
+        [[ -z "$mind" ]] && continue
+        if [[ -d "$TOWN_IDENTITIES/$mind" ]]; then
+            echo "    $mind: exists (memory kept)"
+        else
+            ./scripts/townctl new "$mind" >/dev/null 2>&1 && echo "    $mind: created"
+        fi
+        ./scripts/townctl equip "$mind" >/dev/null 2>&1
+        [[ -n "$persona" ]] && ln -sfn "$persona" "$TOWN_IDENTITIES/$mind/core_identity_prompt.md"
+        # Per-mind model and the wakeup cap, from the spec.
+        model=$(spec_field models | awk -F'\t' -v m="$mind" '$1==m{print $2}')
+        if [[ -n "$model" ]]; then
+            if grep -q '^think_model=' "$TOWN_IDENTITIES/$mind/info.txt"; then
+                sed -i "s|^think_model=.*|think_model=$model|" "$TOWN_IDENTITIES/$mind/info.txt"
+            else
+                printf 'think_model=%s\n' "$model" >> "$TOWN_IDENTITIES/$mind/info.txt"
+            fi
+        fi
+        envf="$TOWN_IDENTITIES/$mind/.env"
+        touch "$envf"; chmod 600 "$envf"
+        if grep -q '^SHELLM_MAX_ITERATIONS=' "$envf"; then
+            sed -i "s|^SHELLM_MAX_ITERATIONS=.*|SHELLM_MAX_ITERATIONS=$ITERS|" "$envf"
+        else
+            printf 'SHELLM_MAX_ITERATIONS=%s\n' "$ITERS" >> "$envf"
+        fi
+    done <<< "$(spec_field personas)"
+
+    if [[ -n "$STOCK" ]]; then
+        echo "==> stock agents"
+        while IFS= read -r who; do
+            [[ -z "$who" ]] && continue
+            idx=$(grep -n "^    name: '" ai-town/data/characters.ts | grep -i "'$who'" | head -1 | cut -d: -f1)
+            if [[ -z "$idx" ]]; then echo "    $who: not a known character — skipped" >&2; continue; fi
+            n=$(grep -n "^    name: '" ai-town/data/characters.ts | grep -n "'$who'" | head -1 | cut -d: -f1)
+            present=$(curl -sS --max-time 15 http://127.0.0.1:3210/api/query -H 'Content-Type: application/json' \
+                -d "{\"path\":\"world:gameDescriptions\",\"args\":{\"worldId\":\"$WORLD\"},\"format\":\"json\"}" \
+                | py -c "import sys,json;d=json.load(sys.stdin).get('value') or {};print(sum(1 for p in d.get('playerDescriptions',[]) if p['name']=='$who'))")
+            if [[ "${present:-0}" -gt 0 ]]; then echo "    $who: already here"; continue; fi
+            curl -sS --max-time 20 http://127.0.0.1:3210/api/mutation -H 'Content-Type: application/json' \
+                -d "{\"path\":\"world:sendWorldInput\",\"args\":{\"engineId\":\"$ENGINE\",\"name\":\"createAgent\",\"args\":{\"descriptionIndex\":$((n-1))}},\"format\":\"json\"}" >/dev/null \
+                && echo "    $who: added"
+        done <<< "$STOCK"
+    fi
+
+    echo "==> bridge (before the minds — they inherit its environment)"
+    pkill -f "run-bridge" 2>/dev/null; sleep 2
+    # shellcheck disable=SC2086
+    setsid nohup ./scripts/run-bridge.sh $(echo "$MINDS" | tr '\n' ' ') \
+        --experiment "$NAME" --spec "$SPEC" --interval 2 >/dev/null 2>&1 < /dev/null &
+    sleep 10
+    tail -3 state/logs/bridge.log | sed 's/^/    /'
+
+    echo "==> minds thinking"
+    while IFS= read -r mind; do
+        [[ -z "$mind" ]] && continue
+        ./scripts/restart-mind.sh "$mind" >/dev/null 2>&1 && echo "    $mind: running"
+    done <<< "$MINDS"
+    echo "==> up."
+    ;;
+
+status)
+    echo "==> experiment '$NAME'"
+    printf '    bridge:  '; pgrep -f "headlong_town" >/dev/null && echo running || echo stopped
+    printf '    backend: '; curl -fsS --max-time 4 http://127.0.0.1:3210/version >/dev/null 2>&1 && echo running || echo stopped
+    while IFS= read -r mind; do
+        [[ -z "$mind" ]] && continue
+        t=$(ls "$TOWN_IDENTITIES/$mind"/trajectories/*/trajectory.jsonl 2>/dev/null | head -1)
+        printf '    %-10s ' "$mind"
+        pgrep -f "thinkers start" >/dev/null && printf 'thinking' || printf 'stopped '
+        [[ -n "$t" ]] && printf '  %s steps' "$(wc -l < "$t")"
+        echo
+    done <<< "$(spec_field minds)"
+    ;;
+
+down)
+    echo "==> stopping '$NAME'"
+    while IFS= read -r mind; do
+        [[ -z "$mind" ]] && continue
+        (source "$TOWN_IDENTITIES/$mind/activate" >/dev/null 2>&1; thinkers stop >/dev/null 2>&1) || true
+        echo "    $mind: stopped"
+    done <<< "$(spec_field minds)"
+    pkill -f "run-bridge" 2>/dev/null; pkill -f "headlong_town" 2>/dev/null
+    sleep 2; pkill -f shellm 2>/dev/null
+    echo "    bridge stopped, agent runs reaped"
+    ;;
+
+*) echo "unknown command: $CMD (up|status|down)" >&2; exit 1 ;;
+esac

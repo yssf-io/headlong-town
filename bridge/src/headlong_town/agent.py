@@ -43,7 +43,10 @@ PROXIMITY_RANGE = 6.0
 
 
 class Agent:
-    def __init__(self, identity: Identity, world: World, state_dir: Path):
+    def __init__(self, identity: Identity, world: World, state_dir: Path, tuning=None):
+        # Perception and pacing come from the experiment; the module constants
+        # below are the defaults an experiment inherits when it says nothing.
+        self.tuning = tuning
         self.identity = identity
         self.world = world
         self.state_dir = state_dir
@@ -228,7 +231,7 @@ class Agent:
                 (me["position"]["x"], me["position"]["y"]),
                 (other["position"]["x"], other["position"]["y"]),
             )
-            if gap <= PROXIMITY_RANGE:
+            if gap <= self._t('proximity_range', PROXIMITY_RANGE):
                 near.add(pid)
 
         arrived = near - self._near
@@ -288,7 +291,7 @@ class Agent:
         if gap < CONVERSATION_DISTANCE:
             return
         now = time.monotonic()
-        if now - self._last_meet_nudge < MEET_NUDGE_COOLDOWN:
+        if now - self._last_meet_nudge < self._t('meet_nudge_cooldown', MEET_NUDGE_COOLDOWN):
             return
         self._last_meet_nudge = now
         who = self.world.player_names().get(their_id, "them")
@@ -317,7 +320,7 @@ class Agent:
         if self.identity.is_running("monolith"):
             self._idle_since = time.monotonic()
             return
-        if time.monotonic() - self._idle_since < SPONTANEITY_INTERVAL:
+        if time.monotonic() - self._idle_since < self._t('spontaneity_interval', SPONTANEITY_INTERVAL):
             return
         self._idle_since = time.monotonic()
         step = self.identity.last_step() or {"type": "monolith-wake", "source": "town"}
@@ -338,12 +341,16 @@ class Agent:
         if self.identity.is_running("monolith"):
             return
         now = time.monotonic()
-        if now - self._last_monolith_wake < MONOLITH_WAKE_COOLDOWN:
+        if now - self._last_monolith_wake < self._t('monolith_wake_cooldown', MONOLITH_WAKE_COOLDOWN):
             return
         self._last_monolith_wake = now
         step = self.identity.last_step()
         if step:
             self.identity.trigger("monolith", step)
+
+    def _t(self, name: str, fallback):
+        """An experiment's value for a tunable, or the shipped default."""
+        return getattr(self.tuning, name, fallback) if self.tuning else fallback
 
     def _notice_arrival(self) -> None:
         """Tell the mind when a walk it chose has finished.

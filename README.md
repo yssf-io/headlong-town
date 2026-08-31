@@ -76,6 +76,30 @@ cd ai-town && npx convex run init '{"experiment":"discovery","numAgents":3}'
 `docker compose --profile full up` puts the frontend in a container too, at the
 cost of a slow Ubuntu image build. Prefer the host during development.
 
+## Running an experiment
+
+An experiment declares who lives in the town. The repo ships the apparatus and
+sensible defaults; **the experiment itself is yours** and lives in a gitignored
+`experiments/` directory, because a run of this town is research data rather
+than part of the software.
+
+```bash
+cp -r experiments.example experiments/myrun
+$EDITOR experiments/myrun/experiment.toml     # who lives here
+./scripts/experiment up     myrun
+./scripts/experiment status myrun
+./scripts/experiment down   myrun
+```
+
+Only two things have no default, because nobody can choose them for you: the
+**minds** (`[[minds]]`, each a full Headlong identity with its own persona) and
+which **stock AI Town characters** join them. Everything else — models,
+perception range, pacing, the wakeup cap — is tuned and overridable under
+`[bridge]`. See `experiments.example/experiment.toml`.
+
+`up` is idempotent: it creates only what is missing, so adding a mind to a spec
+and re-running adds that mind and leaves the others, memories intact.
+
 ## Status
 
 Milestone **M0 — scaffolding**. See PLAN.md §8 for what comes next.

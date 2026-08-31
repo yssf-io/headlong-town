@@ -1,0 +1,43 @@
+# An experiment: who lives in the town, and how the place is tuned.
+#
+# Copy this directory to experiments/<your-name>/ and edit. That directory is
+# gitignored on purpose: the apparatus belongs in the repo, a run of it is your
+# research data.
+#
+#   ./scripts/experiment up <your-name>
+#   ./scripts/experiment status <your-name>
+#   ./scripts/experiment down <your-name>
+
+name = "example"
+description = "Two persistent minds and one stock character."
+
+[world]
+# Stock AI Town characters to place alongside the minds, by name from
+# ai-town/data/characters.ts: Lucky, Bob, Stella, Alice, Pete.
+#
+# They are cheap company and a useful control -- each is a stateless prompt
+# with a fixed goal and no memory between utterances, so they make the
+# difference a persistent mind makes very visible. Empty for a solo run.
+stock_agents = ["Lucky"]
+
+# Every mind is a full Headlong identity: its own trajectory, memory and shell.
+# Nothing here has a default -- who lives in your town is the experiment.
+[[minds]]
+name = "ada"
+persona = "personas/ada.md"
+
+[[minds]]
+name = "bo"
+persona = "personas/bo.md"
+# Per-mind override; otherwise [bridge].model is used.
+# model = "anthropic/claude-sonnet-4.5"
+
+# Everything below is optional and already tuned. Override only what you are
+# actually studying.
+[bridge]
+# model                  = "deepseek/deepseek-v4-flash-0731"
+# max_iterations         = 20    # cap on one wakeup's shellm loop
+# proximity_range        = 6.0   # tiles at which someone is "near you"
+# monolith_wake_cooldown = 30    # seconds; floor between perception-driven runs
+# meet_nudge_cooldown    = 45    # seconds; how often to remind a stalled walker
+# spontaneity_interval   = 90    # seconds a quiet mind waits before thinking

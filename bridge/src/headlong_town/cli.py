@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .agent import Agent
 from .commands import COMMANDS
+from . import config as expconfig
 from . import control
 from .convexclient import ConvexClient, ConvexError
 from .headlong import Identity
@@ -98,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="headlong-town-bridge")
     parser.add_argument("identities", nargs="+", help="identity names to embody")
     parser.add_argument("--experiment", default=os.environ.get("TOWN_EXPERIMENT") or None)
+    parser.add_argument("--spec", default=None,
+                        help="path to an experiment dir; supplies tuning and the roster")
     parser.add_argument("--convex-url", default=os.environ.get("CONVEX_URL", "http://127.0.0.1:3210"))
     parser.add_argument("--root", default=None, help="repo root (default: inferred)")
     parser.add_argument("--interval", type=float, default=1.0, help="poll seconds")
@@ -124,12 +127,23 @@ def main(argv: list[str] | None = None) -> int:
         log.error("%s", exc)
         return 1
 
+    # An experiment supplies tuning (and, via the runner, the roster). Without
+    # one the shipped defaults apply, so a bare `run-bridge.sh ada` still works.
+    tuning = None
+    if args.spec:
+        try:
+            tuning = expconfig.load(Path(args.spec))
+            log.info("experiment %s: %s", tuning.name, tuning.description or "(no description)")
+        except expconfig.ExperimentError as exc:
+            log.error("%s", exc)
+            return 1
+
     registry = control.Registry()
     agents = []
     for name in args.identities:
         identity = Identity(root, identities_dir, name)
         state_dir = root / "state" / "bridge" / name
-        agent = Agent(identity, world, state_dir)
+        agent = Agent(identity, world, state_dir, tuning=tuning)
         agent.ensure_body(DEFAULT_DESCRIPTION)
         agents.append(agent)
 

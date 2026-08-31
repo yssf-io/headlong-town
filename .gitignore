@@ -22,8 +22,10 @@ state/
 logs/
 *.log
 
-# Experiment output: config and personas are committed, runs are not
-experiments/*/runs/
+# Experiments are the RESEARCHER'S data, not part of the software. The repo
+# ships the apparatus, sensible defaults, and a documented example spec
+# (experiments.example/); what you actually run belongs to you.
+experiments/
 
 # macOS
 .DS_Store
