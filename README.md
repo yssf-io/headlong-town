@@ -34,71 +34,80 @@ git clone --recursive git@github.com:yssf-io/headlong-town.git
 git submodule update --init
 ```
 
-## Running the stack
+## From a clean clone
 
-Prerequisites: Docker, Node, and an OpenRouter API key (it serves both chat and
-embeddings from one key, which is all ai-town needs).
+You need Docker, Node 20+, and an OpenRouter API key. (`uv` too, if you want the
+mind dashboard.)
+
+**1. Clone with submodules** — Headlong is a submodule, and nothing works without it:
+
+```bash
+git clone --recursive https://github.com/yssf-io/headlong-town.git
+cd headlong-town
+```
+
+**2. Configure the host**
 
 ```bash
 cp .env.example .env
-# set INSTANCE_SECRET (openssl rand -hex 32) and OPENROUTER_API_KEY
-docker compose up -d              # Convex backend + dashboard
-./scripts/setup-baseline.sh       # admin key, provider config, deploy, seed
 ```
 
-Pass `--wipe` to `setup-baseline.sh` when changing the embedding model: the
-vector index dimension must match the model, so existing rows have to go.
+Set two things in `.env`:
 
-|                  | URL                            |
-| ---------------- | ------------------------------ |
-| Convex API       | http://127.0.0.1:3210          |
-| Convex dashboard | http://127.0.0.1:6791          |
-| Town             | http://localhost:5173/ai-town/ |
+- `INSTANCE_SECRET` — any secret, e.g. `openssl rand -hex 32`
+- `OPENROUTER_API_KEY` — one key covers both chat and embeddings
 
-The frontend runs on the host for a fast reload loop:
+`BIND_ADDR` defaults to `127.0.0.1`. Leave it unless you want the UIs reachable
+from another machine, and read the note in `docker-compose.yml` first — Docker
+publishes ports by writing its own firewall rules, which **bypass ufw**.
+
+**3. Start the engine and set it up (once)**
 
 ```bash
-cd ai-town && npm install && npm run dev:frontend
+docker compose up -d          # Convex backend
+cd ai-town && npm install && cd ..
+./scripts/setup.sh            # admin key, LLM config, deploy functions
 ```
 
-Note the URL: vite serves under `base: '/ai-town'` and binds IPv6, so it is
-**http://localhost:5173/ai-town/** — `127.0.0.1:5173` refuses the connection and
-the bare root just redirects.
+Re-run `setup.sh` after any `docker compose down` — that invalidates the admin key.
 
-To watch a particular experiment, add `?experiment=<name>`; with no parameter you
-get the default world.
-
-```bash
-# seed a second town alongside the default one
-cd ai-town && npx convex run init '{"experiment":"discovery","numAgents":3}'
-```
-
-`docker compose --profile full up` puts the frontend in a container too, at the
-cost of a slow Ubuntu image build. Prefer the host during development.
-
-## Running an experiment
-
-An experiment declares who lives in the town. The repo ships the apparatus and
-sensible defaults; **the experiment itself is yours** and lives in a gitignored
-`experiments/` directory, because a run of this town is research data rather
-than part of the software.
+**4. Declare an experiment**
 
 ```bash
 cp -r experiments.example experiments/myrun
-$EDITOR experiments/myrun/experiment.toml     # who lives here
+$EDITOR experiments/myrun/experiment.toml
+```
+
+Two things have no default, because nobody can choose them for you: the
+**minds** that live in the town (each a full Headlong identity, with a persona
+in `personas/`) and which **stock AI Town characters** join them. Everything
+else is tuned already — see `[bridge]` in the example.
+
+**5. Run it**
+
+```bash
 ./scripts/experiment up     myrun
 ./scripts/experiment status myrun
 ./scripts/experiment down   myrun
 ```
 
-Only two things have no default, because nobody can choose them for you: the
-**minds** (`[[minds]]`, each a full Headlong identity with its own persona) and
-which **stock AI Town characters** join them. Everything else — models,
-perception range, pacing, the wakeup cap — is tuned and overridable under
-`[bridge]`. See `experiments.example/experiment.toml`.
+`up` is idempotent: add a mind to the spec, re-run, and it creates only the new
+one — existing minds keep their memories.
 
-`up` is idempotent: it creates only what is missing, so adding a mind to a spec
-and re-running adds that mind and leaves the others, memories intact.
+**6. Watch**
+
+```bash
+cd ai-town && npm run dev:frontend   # the town
+./scripts/run-dash.sh                # the minds
+```
+
+| | |
+|---|---|
+| The town | http://localhost:5173/ai-town/ |
+| Mind dashboard | http://127.0.0.1:8080 |
+| Convex dashboard | `docker compose --profile admin up -d` → http://127.0.0.1:6791 |
+
+The town URL needs the `/ai-town/` path — vite serves under `base: '/ai-town'`.
 
 ## Status
 

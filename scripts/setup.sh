@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# scripts/setup-baseline.sh — bring up the stock AI Town baseline (PLAN.md M0 §8).
+# scripts/setup.sh — one-time platform setup for this host.
 #
-# Idempotent: safe to re-run. Regenerates the admin key (it changes on every
-# `docker compose down`), re-applies Convex env vars, and re-runs init.
+# Prepares the town engine; it does NOT create a world. Worlds belong to
+# experiments: `./scripts/experiment up <name>` seeds the one it needs.
+#
+# Idempotent: safe to re-run, and you MUST re-run it after `docker compose
+# down`, which invalidates the admin key.
 set -euo pipefail
 
 WIPE=0
@@ -58,19 +61,19 @@ npx convex env set LLM_API_KEY "$LLM_API_KEY" >/dev/null
 echo "    LLM_API_KEY=***"
 
 if [[ "$WIPE" -eq 1 ]]; then
-    # Required whenever the embedding model changes: the vector index dimension
+    # Required when the embedding model changes: the vector index dimension
     # must match the model, and existing rows carry the old dimension.
     echo "==> wiping all tables (--wipe)"
     npx convex run testing:wipeAllTables '{}' >/dev/null
 fi
 
-echo "==> deploying functions and seeding the world"
-npm run predev
+echo "==> deploying functions"
+npx convex dev --once 2>&1 | grep -E "ready|error" | sed 's/^/    /'
 
 cat <<'EOL'
 
-==> baseline is up. Now:
-      cd ai-town && npm run dev:frontend     # the town, http://127.0.0.1:5173
-      cd ai-town && npm run dev:backend      # deploy on change + tail logs
-    dashboard: http://127.0.0.1:6791 (paste the admin key from ai-town/.env.local)
+==> platform ready. Now declare an experiment and run it:
+      cp -r experiments.example experiments/myrun
+      $EDITOR experiments/myrun/experiment.toml
+      ./scripts/experiment up myrun
 EOL
