@@ -12,14 +12,25 @@
 
 name: headlong-town
 
+# BIND_ADDR is which address published ports listen on, and it defaults to
+# loopback ON PURPOSE. Docker publishes ports by writing its own DNAT rules,
+# which BYPASS ufw -- so a host with `default deny incoming` and a public IP
+# still serves anything Docker publishes to the whole internet. Convex's admin
+# API is on 3210. Set BIND_ADDR to a private/VPN address in .env to expose it
+# only there.
+
 services:
   backend:
     image: ghcr.io/get-convex/convex-backend:latest
     stop_grace_period: 10s
     stop_signal: SIGINT
     ports:
-      - '${CONVEX_PORT:-3210}:3210'       # Convex API
-      - '${CONVEX_SITE_PORT:-3211}:3211'  # HTTP actions (convex/http.ts)
+      # Loopback for everything on this host (bridge, convex CLI, scripts),
+      # plus BIND_ADDR for a human on the VPN. Never 0.0.0.0.
+      - '127.0.0.1:${CONVEX_PORT:-3210}:3210'
+      - '127.0.0.1:${CONVEX_SITE_PORT:-3211}:3211'
+      - '${BIND_ADDR:-127.0.0.1}:${CONVEX_PORT:-3210}:3210'       # Convex API
+      - '${BIND_ADDR:-127.0.0.1}:${CONVEX_SITE_PORT:-3211}:3211'  # HTTP actions
     volumes:
       - convex-data:/convex/data
     environment:
@@ -50,7 +61,8 @@ services:
     profiles: [admin]
     image: ghcr.io/get-convex/convex-dashboard:latest
     ports:
-      - '${DASHBOARD_PORT:-6791}:6791'
+      - '127.0.0.1:${DASHBOARD_PORT:-6791}:6791'
+      - '${BIND_ADDR:-127.0.0.1}:${DASHBOARD_PORT:-6791}:6791'
     environment:
       - NEXT_PUBLIC_DEPLOYMENT_URL=http://127.0.0.1:${CONVEX_PORT:-3210}
     depends_on:
@@ -65,7 +77,7 @@ services:
     build:
       context: ./ai-town
     ports:
-      - '${FRONTEND_PORT:-5173}:5173'
+      - '${BIND_ADDR:-127.0.0.1}:${FRONTEND_PORT:-5173}:5173'
     environment:
       - VITE_CONVEX_URL=http://127.0.0.1:${CONVEX_PORT:-3210}
     depends_on:
