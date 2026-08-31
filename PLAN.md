@@ -592,6 +592,34 @@ per identity, perception thresholds, the full mind log, and spend per agent.
 
 ## 11. Isolation and deployment
 
+**Stage 1 done (2026-08-31): a mind's sandbox sees only its own identity.**
+
+shellm mounts `dirname()` of every symlink target it finds in a mounted dir. The
+`town` kernel skill was symlinked to `<repo>/town`, whose dirname is the REPO
+ROOT — so the whole repo was mounted read-only into every sandbox and each mind
+could read every other mind's trajectory, memories and notes. Ada found the
+`probe` identity that way and chose not to read further; that was manners, not a
+control. The persona symlink leaked the same way at experiment scope, breaking
+"names only — they learn about each other by talking".
+
+Both are now COPIED into the identity instead of linked, so there is no outside
+target and no repo mount. `experiment sync <name>` re-copies after an edit.
+Only headlong's shipped skills remain symlinked, and those are identical for
+everyone. Verified from inside a fresh sandbox: `state/identities/` lists one
+name, `experiments/` does not exist, and the mind's own trajectory, memories,
+persona and `town` CLI all still work.
+
+**What Stage 1 does NOT close.** Each identity dir is mounted **rw** and contains
+`thinkers/*/step` — scripts the HOST runs as `ubuntu` on the next wakeup. An
+agent that writes there gets host execution and can then read everything. That is
+inherent to headlong, where self-modification is a feature. Closing it is Stage
+2: one container per agent for the whole harness (shellm already detects it is
+inside a container and runs generated code locally, so this removes nested
+Docker rather than adding it). A Unix user per agent is weaker than it looks —
+each would need Docker access, and the docker group is root-equivalent.
+
+
+
 Requirement: **the town is the only shared surface.** Headlong agents run
 arbitrary bash with their own API keys. Two agents that can reach each other's
 filesystem or network are not really two agents.

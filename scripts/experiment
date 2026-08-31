@@ -2,6 +2,7 @@
 # experiment — run a town from a declarative spec.
 #
 #   ./scripts/experiment up     <name>
+#   ./scripts/experiment sync   <name>   push edited personas to running minds
 #   ./scripts/experiment status <name>
 #   ./scripts/experiment down   <name>
 #
@@ -74,7 +75,16 @@ up)
             ./scripts/townctl new "$mind" >/dev/null 2>&1 && echo "    $mind: created"
         fi
         ./scripts/townctl equip "$mind" >/dev/null 2>&1
-        [[ -n "$persona" ]] && ln -sfn "$persona" "$TOWN_IDENTITIES/$mind/core_identity_prompt.md"
+        # COPIED, never symlinked: a link here makes shellm mount the whole
+        # personas directory into the sandbox, so every mind could read every
+        # other mind's persona -- which breaks "names only, they learn about
+        # each other by talking" (PLAN.md §4). Re-copied on `up` and `sync`.
+        if [[ -n "$persona" ]]; then
+            # rm first: the destination may still be a symlink pointing at the
+            # source, and cp then refuses ("same file").
+            rm -f "$TOWN_IDENTITIES/$mind/core_identity_prompt.md"
+            cp "$persona" "$TOWN_IDENTITIES/$mind/core_identity_prompt.md"
+        fi
         # Per-mind model and the wakeup cap, from the spec.
         model=$(spec_field models | awk -F'\t' -v m="$mind" '$1==m{print $2}')
         if [[ -n "$model" ]]; then
@@ -126,6 +136,25 @@ up)
     echo "==> up."
     ;;
 
+sync)
+    # Personas and the town skill are copied into each identity rather than
+    # linked (for isolation), so an edit needs pushing out. Minds keep running:
+    # each reads its persona fresh on the next wakeup.
+    echo "==> syncing personas + town skill into '$NAME'"
+    while IFS=$'\t' read -r mind persona; do
+        [[ -z "$mind" ]] && continue
+        [[ -d "$TOWN_IDENTITIES/$mind" ]] || { echo "    $mind: no such identity — run 'up' first"; continue; }
+        ./scripts/townctl equip "$mind" >/dev/null 2>&1
+        if [[ -n "$persona" ]]; then
+            # rm first: the destination may still be a symlink pointing at the
+            # source, and cp then refuses ("same file").
+            rm -f "$TOWN_IDENTITIES/$mind/core_identity_prompt.md"
+            cp "$persona" "$TOWN_IDENTITIES/$mind/core_identity_prompt.md"
+        fi
+        echo "    $mind: synced"
+    done <<< "$(spec_field personas)"
+    ;;
+
 status)
     echo "==> experiment '$NAME'"
     printf '    bridge:  '; pgrep -f "headlong_town" >/dev/null && echo running || echo stopped
@@ -152,5 +181,5 @@ down)
     echo "    bridge stopped, agent runs reaped"
     ;;
 
-*) echo "unknown command: $CMD (up|status|down)" >&2; exit 1 ;;
+*) echo "unknown command: $CMD (up|sync|status|down)" >&2; exit 1 ;;
 esac

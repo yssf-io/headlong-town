@@ -34,9 +34,17 @@ thinkers stop --force >/dev/null 2>&1 || true
 sleep 2
 
 echo "==> reaping orphaned shellm runs"
-pkill -f "shellm" 2>/dev/null || true
+# NOT `pkill -f shellm`: that matches any process whose command line merely
+# CONTAINS the word -- including the shell running this script, or a caller
+# that mentioned "shellm-" in an argument. It has killed the caller twice.
+# Match the binary path, and never signal ourselves or our ancestors.
+_self_tree=" $$ $PPID "
+for _pid in $(pgrep -f "bin/shellm" 2>/dev/null); do
+    case "$_self_tree" in *" $_pid "*) continue ;; esac
+    kill "$_pid" 2>/dev/null || true
+done
 sleep 1
-printf '    %s still alive\n' "$(pgrep -f shellm | wc -l | tr -d ' ')"
+printf '    %s still alive\n' "$(pgrep -f "bin/shellm" | wc -l | tr -d ' ')"
 
 echo "==> clearing stale shellm env"
 rm -rf "$DIR/.shellm/envs/$NAME"

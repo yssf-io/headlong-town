@@ -26,7 +26,14 @@ equip() {
     #    system prompt in full, and crucially reach the responder too -- which is
     #    where the group turn-taking policy has to land. A regular skill would
     #    only contribute its name and description. (PLAN.md §4)
-    ln -sfn "$ROOT/town" "$dir/kernel/town"
+    #    COPIED, never symlinked. shellm mounts dirname() of every symlink
+    #    target it finds in the identity dir, and dirname("$ROOT/town") is the
+    #    REPO ROOT -- so this one link mounted the whole repo into the sandbox
+    #    and every mind could read every other mind's trajectory and memories.
+    #    A copy has no outside target, so a sandbox sees only its own identity.
+    rm -rf "$dir/kernel/town"
+    mkdir -p "$dir/kernel/town"
+    cp "$ROOT/town/SKILL.md" "$dir/kernel/town/SKILL.md"
 
     # 2. The `town` binary has to reach generated code, which runs in a Docker
     #    sandbox, so being on the host PATH is not enough: shellm only exposes
@@ -40,13 +47,15 @@ equip() {
     #    have _build_shellm_flags honour requires.bins.
     local lib="$dir/thinkers/_lib/common.sh"
     [[ -f "$lib" ]] || die "no thinker lib at $lib"
-    if grep -q 'put sub town' "$lib"; then
-        printf '  town binary already exposed to %s\n' "$name"
-    else
-        perl -pi -e 's/(for cmd in mem traj skills context llm shellm chat glob view put sub)(; do)/$1 town$2/' "$lib"
-        grep -q 'put sub town' "$lib" || die "could not patch $lib"
-        printf '  exposed the town binary to %s\n' "$name"
+    #    Emit an ABSOLUTE path rather than adding `town` to the name list the
+    #    loop resolves with `command -v`. That loop depends on the PATH of
+    #    whichever process launched the thinker -- the dispatcher and the bridge
+    #    each build their own -- so a mind's body silently disappeared from its
+    #    sandbox depending on who woke it. An absolute path cannot vary.
+    if ! ./scripts/_expose-town-bin.py "$lib" "$ROOT/town/town" >/dev/null; then
+        die "could not expose the town binary in $lib"
     fi
+    printf '  town binary exposed to %s (absolute path)\n' "$name"
 
     # 3. Cap a wakeup. A monolith wakeup is one function: pick it, do it, append
     #    a step, stop. shellm's loop ends only when the model writes FINAL=...,

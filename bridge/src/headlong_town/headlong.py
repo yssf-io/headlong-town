@@ -29,8 +29,13 @@ class Identity:
         self._running: dict[str, int] = {}
         self._env = {
             **os.environ,
-            "PATH": f"{repo_root/'headlong'/'bin'}:{repo_root/'headlong'/'tools'}:"
-                    + os.environ.get("PATH", ""),
+            # town/ FIRST: shellm decides what to mount into a mind's sandbox by
+            # running `command -v` over the thinker's --bin list, so a binary
+            # missing from PATH here is missing from the sandbox. The bridge owns
+            # monolith wakes (PLAN §3), so leaving town/ out meant most sandboxes
+            # were built with no `town` at all and the mind quietly had no body.
+            "PATH": f"{repo_root/'town'}:{repo_root/'headlong'/'bin'}:"
+                    f"{repo_root/'headlong'/'tools'}:" + os.environ.get("PATH", ""),
             "HEADLONG_HOME": str(repo_root / "state" / "headlong"),
         }
 
