@@ -87,5 +87,12 @@ Milestone **M0 — scaffolding**. See PLAN.md §8 for what comes next.
 
 ## Licenses
 
-This repo is Apache 2.0. Vendored AI Town is Apache 2.0 (a16z-infra); Headlong
-is Apache 2.0 (Laude Institute). Both retain their own LICENSE files.
+This project's own code is Apache 2.0 (see `LICENSE`).
+
+Third-party code it carries or depends on:
+
+| | licence | how |
+|---|---|---|
+| [AI Town](https://github.com/a16z-infra/ai-town) | MIT, © 2023 a16z-infra | vendored under `ai-town/`, its `LICENSE` retained |
+| [Headlong](https://github.com/laude-institute/headlong) | Apache 2.0, © Laude Institute | git submodule — not redistributed here |
+| `bridge/src/headlong_town/mindlog.py` | Apache 2.0, © Laude Institute | adapted from Headlong's Slack bridge; attributed in the file header |

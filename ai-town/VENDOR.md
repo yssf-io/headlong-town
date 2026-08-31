@@ -4,7 +4,7 @@ This directory is a **vendored copy**, not a submodule and not a subtree.
 
     upstream: git@github.com:a16z-infra/ai-town.git
     vendored: 8e05997f2409275669c8344b84a51692e83f3f33  (2026-08-25)
-    license:  Apache 2.0 — see LICENSE
+    license:  MIT — see LICENSE (Copyright (c) 2023 a16z-infra)
 
 ## Why vendored
 
