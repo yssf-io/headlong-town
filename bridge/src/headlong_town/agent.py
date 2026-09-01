@@ -320,9 +320,14 @@ class Agent:
         if self.identity.is_running("monolith"):
             self._idle_since = time.monotonic()
             return
-        if time.monotonic() - self._idle_since < self._t('spontaneity_interval', SPONTANEITY_INTERVAL):
+        idle = time.monotonic() - self._idle_since
+        if idle < self._t('spontaneity_interval', SPONTANEITY_INTERVAL):
             return
         self._idle_since = time.monotonic()
+        # The only clock the monolith has. When it goes quiet the mind simply
+        # stops thinking, with nothing in any log to say so -- which cost ten
+        # hours on 2026-09-01. Say out loud that it fired.
+        log.info("spontaneity: waking monolith after %.0fs idle", idle)
         step = self.identity.last_step() or {"type": "monolith-wake", "source": "town"}
         self.identity.trigger("monolith", step)
 

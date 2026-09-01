@@ -185,8 +185,13 @@ class Identity:
         # container_id, after which every run dies with "Env <name> was created
         # without a mount for this run's workdir". So ask the system instead:
         # is ANY shellm run alive for this identity, whoever started it?
+        # Match bin/shellm, not bare "shellm": when the watchdog kills a run it
+        # kills the host-side `docker exec`, whose command line carries both
+        # ".shellm_final" and this identity's path -- so a loose pattern reads an
+        # already-dead run as alive. Observed 2026-09-01: an orphaned exec wedged
+        # on a FIFO held the busy flag for 10 hours and the mind never woke.
         probe = subprocess.run(
-            ["pgrep", "-f", f"shellm.*{self.dir}"],
+            ["pgrep", "-f", f"bin/shellm.*{self.dir}"],
             capture_output=True, text=True,
         )
         return probe.returncode == 0 and bool(probe.stdout.strip())
