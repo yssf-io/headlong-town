@@ -153,8 +153,24 @@ class World:
         self.send_input("moveTo", {"playerId": player_id, "destination": None})
 
     def map(self) -> dict[str, Any]:
+        # Convex hands back JSON numbers, so these arrive as floats and every
+        # arithmetic use downstream inherits that ("the town is 64.0 tiles
+        # wide", and randint() outright refusing a float bound).
         m = self.descriptions()["worldMap"]
-        return {"width": m["width"], "height": m["height"]}
+        return {"width": int(m["width"]), "height": int(m["height"])}
+
+    def blocked(self, x: int, y: int) -> bool:
+        """Is this tile solid scenery?
+
+        Mirrors blockedWithPositions() in ai-town/convex/aiTown/movement.ts:
+        a tile is blocked when ANY object layer holds something other than -1.
+        The engine simply never finds a path to a blocked tile and reports
+        nothing, so a mind told "you will notice when you arrive" waits forever
+        for an arrival that cannot happen. Checking here is what makes that
+        promise true.
+        """
+        m = self.descriptions()["worldMap"]
+        return any(layer[int(x)][int(y)] != -1 for layer in m["objectTiles"])
 
     def accept_invite(self, player_id: str, conversation_id: str) -> None:
         self.send_input("acceptInvite", {"playerId": player_id, "conversationId": conversation_id})

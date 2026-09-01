@@ -161,6 +161,10 @@ def move(agent: Any, args: dict[str, Any]) -> str:
         raise TownRefusal(
             f"({x}, {y}) is outside the town, which is {m['width']}x{m['height']}"
         )
+    if agent.world.blocked(x, y):
+        raise TownRefusal(
+            f"({x}, {y}) is solid scenery — you cannot stand there. Pick a tile beside it."
+        )
     if _participating(agent):
         raise TownRefusal("you cannot walk off mid-conversation — `town leave` first")
     agent.world.move_to(me_id, x, y)
@@ -184,8 +188,15 @@ def wander(agent: Any, _args: dict[str, Any]) -> str:
     if _participating(agent):
         raise TownRefusal("you cannot wander off mid-conversation — `town leave` first")
     m = agent.world.map()
-    x = random.randint(1, m["width"] - 2)
-    y = random.randint(1, m["height"] - 2)
+    # Somewhere she can actually stand: an unreachable target strands her
+    # waiting for an arrival the engine will never report.
+    for _ in range(50):
+        x = random.randint(1, m["width"] - 2)
+        y = random.randint(1, m["height"] - 2)
+        if not agent.world.blocked(x, y):
+            break
+    else:
+        raise TownRefusal("nowhere open to wander to right now")
     agent.world.move_to(me_id, x, y)
     return f"You wander off towards ({x}, {y})."
 
