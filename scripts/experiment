@@ -45,6 +45,25 @@ else:                      print(getattr(e, field, ""))
 PY
 }
 
+
+# Stopping the bridge means stopping BOTH processes: run-bridge.sh is only a
+# wrapper, and the python module it spawns is what actually holds the control
+# plane's port. Killing the wrapper alone leaves the port bound, and the next
+# `up` dies with "Address already in use" while still reporting success.
+# Never match the bare repo path or a bare "shellm" -- both have killed the
+# caller's own shell. Match the module and the binary, and skip ourselves.
+stop_bridge() {
+    pkill -f "run-bridge" 2>/dev/null || true
+    for pid in $(pgrep -f "headlong_town\.cli" 2>/dev/null); do
+        [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
+        kill "$pid" 2>/dev/null || true
+    done
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        pgrep -f "headlong_town\.cli" >/dev/null 2>&1 || break
+        sleep 1
+    done
+}
+
 case "$CMD" in
 up)
     MINDS=$(spec_field minds) || exit 1
@@ -121,7 +140,7 @@ up)
     fi
 
     echo "==> bridge (before the minds — they inherit its environment)"
-    pkill -f "run-bridge" 2>/dev/null; sleep 2
+    stop_bridge
     # shellcheck disable=SC2086
     setsid nohup ./scripts/run-bridge.sh $(echo "$MINDS" | tr '\n' ' ') \
         --experiment "$NAME" --spec "$SPEC" --interval 2 >/dev/null 2>&1 < /dev/null &
@@ -176,8 +195,8 @@ down)
         (source "$TOWN_IDENTITIES/$mind/activate" >/dev/null 2>&1; thinkers stop >/dev/null 2>&1) || true
         echo "    $mind: stopped"
     done <<< "$(spec_field minds)"
-    pkill -f "run-bridge" 2>/dev/null; pkill -f "headlong_town" 2>/dev/null
-    sleep 2; pkill -f shellm 2>/dev/null
+    stop_bridge
+    sleep 2; pkill -f "bin/shellm" 2>/dev/null || true
     echo "    bridge stopped, agent runs reaped"
     ;;
 
