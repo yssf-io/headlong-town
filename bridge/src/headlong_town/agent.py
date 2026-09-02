@@ -328,8 +328,15 @@ class Agent:
         # stops thinking, with nothing in any log to say so -- which cost ten
         # hours on 2026-09-01. Say out loud that it fired.
         log.info("spontaneity: waking monolith after %.0fs idle", idle)
-        step = self.identity.last_step() or {"type": "monolith-wake", "source": "town"}
-        self.identity.trigger("monolith", step)
+        # ALWAYS a monolith-wake, never a replay of the last step. Replaying it
+        # deadlocks: the monolith's step script silently `exit 0`s on an
+        # observation/action/merge whose source is the monolith itself (its own
+        # steps should never come back to it), so if the mind's last act was
+        # `traj append --field source=monolith` -- which is how she records
+        # nearly every wakeup -- the wake does nothing, appends nothing, and the
+        # next tick replays the very same step. Observed 2026-09-01 21:59 to
+        # 2026-09-02 10:47: 721 wakes fired, not one run started.
+        self.identity.trigger("monolith", {"type": "monolith-wake", "source": "town"})
 
     def _wake_monolith(self) -> None:
         """Nudge the monolith after perception, without stacking runs.
@@ -349,9 +356,14 @@ class Agent:
         if now - self._last_monolith_wake < self._t('monolith_wake_cooldown', MONOLITH_WAKE_COOLDOWN):
             return
         self._last_monolith_wake = now
+        # The perception we just appended -- unless a run of her own slipped a
+        # step in after it. The monolith silently ignores its OWN steps, so
+        # handing one back drops the perception with no trace; a monolith-wake
+        # is never ignored, so fall back to that.
         step = self.identity.last_step()
-        if step:
-            self.identity.trigger("monolith", step)
+        if not step or step.get("source") == "monolith":
+            step = {"type": "monolith-wake", "source": "town"}
+        self.identity.trigger("monolith", step)
 
     def _t(self, name: str, fallback):
         """An experiment's value for a tunable, or the shipped default."""
