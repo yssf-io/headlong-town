@@ -69,6 +69,8 @@ class Agent:
         self._last_meet_nudge = 0.0
         self._idle_since = time.monotonic()
         self._near: set[str] = set()
+        self._run_failures = 0
+        self._last_run_failure = ""
 
     def _load_cursor(self) -> int:
         if self._cursor_file.is_file():
@@ -432,6 +434,16 @@ class Agent:
             self._offset = offset
             self._save_cursor()
         for step in steps:
+            if step.get("type") == "error":
+                self._notice_run_failure(step)
+                continue
+            if step.get("type") == "final":
+                # A run got all the way through; the mind is healthy again.
+                if self._run_failures:
+                    log.info("%s: runs recovered after %d failure(s)",
+                             self.identity.name, self._run_failures)
+                    self._run_failures = 0
+                continue
             if step.get("type") != "message":
                 continue
             if step.get("from") != self.identity.name:
@@ -447,6 +459,29 @@ class Agent:
             text = (step.get("content") or "").strip()
             if text:
                 self.speak(text, to=step["to"])
+
+    def _notice_run_failure(self, step: dict[str, Any]) -> None:
+        """Say out loud that a run we started died.
+
+        shellm records a durable `error` step for a failed run, but nothing
+        surfaced it: the bridge logged "waking monolith" and never whether the
+        run then lived, so a dead town and a working one read identically.
+        That has cost hours on four occasions with four unrelated causes -- a
+        truncated FINAL, an orphaned exec, a replayed step, an exhausted API
+        key. The causes differed; the blindness was the constant.
+
+        Repeats are collapsed: an outage yields one error per wake (486 of them
+        overnight on 2026-09-02), and a flooded log is another way to see
+        nothing.
+        """
+        self._run_failures += 1
+        detail = (step.get("content") or step.get("reason") or "run failed").strip()
+        if self._run_failures == 1 or detail != self._last_run_failure:
+            log.warning("%s: %s (rc=%s)", self.identity.name, detail[:160], step.get("rc"))
+        elif self._run_failures % 20 == 0:
+            log.warning("%s: still failing -- %d consecutive runs (%s)",
+                        self.identity.name, self._run_failures, detail[:100])
+        self._last_run_failure = detail
 
     def speak(self, text: str, to: str) -> None:
         if not self.resolve_body():
