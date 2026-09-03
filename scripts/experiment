@@ -83,7 +83,14 @@ up)
     ENGINE=$(curl -sS --max-time 15 http://127.0.0.1:3210/api/query -H 'Content-Type: application/json' \
         -d "{\"path\":\"world:worldStatusForExperiment\",\"args\":{\"experiment\":\"$NAME\"},\"format\":\"json\"}" \
         | py -c 'import sys,json; print((json.load(sys.stdin).get("value") or {}).get("engineId",""))')
-    echo "    world $WORLD"
+    # Claim the town UI. The frontend renders whichever world is flagged
+    # isDefault, and a new experiment's world is not it -- so without this the
+    # browser keeps showing the PREVIOUS experiment's town, where the new minds
+    # have no bodies. Looks exactly like "the second mind never joined".
+    curl -sS --max-time 20 http://127.0.0.1:3210/api/mutation -H 'Content-Type: application/json' \
+        -d "{\"path\":\"aiTown/admin:setDefaultWorld\",\"args\":{\"worldId\":\"$WORLD\"},\"format\":\"json\"}" \
+        >/dev/null && echo "    world $WORLD (now the default the UI shows)" \
+        || echo "    world $WORLD (WARNING: could not make it the default)"
 
     echo "==> minds"
     while IFS=$'\t' read -r mind persona; do
