@@ -41,3 +41,13 @@ persona = "personas/bo.md"
 # monolith_wake_cooldown = 30    # seconds; floor between perception-driven runs
 # meet_nudge_cooldown    = 45    # seconds; how often to remind a stalled walker
 # spontaneity_interval   = 90    # seconds a quiet mind waits before thinking
+# effort                 = "high"   # low/medium/high/xhigh/max — how hard the
+#                                   # model thinks before answering. ~95% of a
+#                                   # wakeup is spent waiting on the model, so
+#                                   # this drives pace AND cost more than
+#                                   # anything else here.
+# max_tokens             = 32768    # ceiling on one response. Reasoning tokens
+#                                   # count against it: too low and a mind
+#                                   # spends the budget thinking and returns
+#                                   # nothing. Note your API key must be able to
+#                                   # afford this up front, or every call fails.

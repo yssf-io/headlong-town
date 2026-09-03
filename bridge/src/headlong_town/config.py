@@ -56,6 +56,17 @@ class Experiment:
     # How long a quiet mind waits before thinking on its own again.
     spontaneity_interval: float = 90.0
     model: str = "deepseek/deepseek-v4-flash-0731"
+    # How hard the model thinks before answering. headlong defaults to "high",
+    # which suits a general agent; a townsperson mostly looks, decides and acts.
+    # This is the lever on all three of: seconds per wakeup (~95% of a run is
+    # waiting on the model), tokens burned per call, and spend per day.
+    effort: str = "high"
+    # Ceiling on ONE response. Reasoning tokens count against it, so a mind that
+    # ruminates can spend the whole budget thinking and return nothing at all --
+    # observed at 16384, which truncated and then failed empty. Note the ceiling
+    # is also charged against your key's remaining credit up front: a limit
+    # larger than you can afford makes every call fail outright.
+    max_tokens: int = 32768
 
     @property
     def mind_names(self) -> list[str]:
@@ -83,6 +94,7 @@ def load(path: Path) -> Experiment:
     for key in (
         "max_iterations", "proximity_range", "monolith_wake_cooldown",
         "meet_nudge_cooldown", "spontaneity_interval", "model",
+        "effort", "max_tokens",
     ):
         if key in bridge:
             setattr(exp, key, bridge[key])

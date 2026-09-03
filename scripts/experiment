@@ -69,6 +69,8 @@ up)
     MINDS=$(spec_field minds) || exit 1
     STOCK=$(spec_field stock)
     ITERS=$(spec_field max_iterations)
+    EFFORT=$(spec_field effort)
+    MAXTOK=$(spec_field max_tokens)
     echo "==> experiment '$NAME': $(spec_field description)"
     echo "    minds:        $(echo "$MINDS" | tr '\n' ' ')"
     echo "    stock agents: ${STOCK:-(none)}"
@@ -120,13 +122,23 @@ up)
                 printf 'think_model=%s\n' "$model" >> "$TOWN_IDENTITIES/$mind/info.txt"
             fi
         fi
+        # Per-mind shellm settings, all from the spec. Set them here and not by
+        # hand: a value edited into .env is invisible to anyone reading the
+        # experiment, which is the whole point of having a spec.
         envf="$TOWN_IDENTITIES/$mind/.env"
         touch "$envf"; chmod 600 "$envf"
-        if grep -q '^SHELLM_MAX_ITERATIONS=' "$envf"; then
-            sed -i "s|^SHELLM_MAX_ITERATIONS=.*|SHELLM_MAX_ITERATIONS=$ITERS|" "$envf"
-        else
-            printf 'SHELLM_MAX_ITERATIONS=%s\n' "$ITERS" >> "$envf"
-        fi
+        set_env_var() {
+            local key="$1" val="$2"
+            [[ -z "$val" ]] && return 0
+            if grep -q "^${key}=" "$envf"; then
+                sed -i "s|^${key}=.*|${key}=${val}|" "$envf"
+            else
+                printf '%s=%s\n' "$key" "$val" >> "$envf"
+            fi
+        }
+        set_env_var SHELLM_MAX_ITERATIONS "$ITERS"
+        set_env_var SHELLM_EFFORT "$EFFORT"
+        set_env_var SHELLM_MAX_TOKENS "$MAXTOK"
     done <<< "$(spec_field personas)"
 
     if [[ -n "$STOCK" ]]; then
