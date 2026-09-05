@@ -50,7 +50,31 @@ echo "==> clearing stale shellm env"
 rm -rf "$DIR/.shellm/envs/$NAME"
 
 echo "==> starting thinkers"
-# ONLY the responder runs under the dispatcher. The bridge owns monolith wakes
-# outright -- two independent wake sources raced to create the docker env and
-# wedged every subsequent run. See PLAN §14.
-thinkers start responder 2>&1 | tail -2
+# Which thinkers run under the dispatcher depends on the experiment's wake mode
+# (TOWN_WAKE_MODE, set from [bridge].wake by scripts/experiment).
+#
+#   bridge      ONLY the responder. The bridge owns monolith wakes outright --
+#               two independent wake sources raced to create the docker env and
+#               wedged every subsequent run. See PLAN §14.
+#   dispatcher  Everything, which is headlong's own design: the dispatcher
+#               fires thinkers from trajectory steps and the monolith paces
+#               itself via run/<name>.wake_at. The bridge must then NOT wake
+#               anything, or the same two-source race returns.
+if [[ "${TOWN_WAKE_MODE:-dispatcher}" == "dispatcher" ]]; then
+    thinkers start 2>&1 | tail -3
+    # Bootstrap the monolith. It subscribes trigger_self:false, and the
+    # dispatcher's liveness watchdog covers only trigger_self thinkers
+    # ("reactive thinkers are legitimately silent for long stretches"), so a
+    # freshly started monolith has no wake_at armed and no wake source. It
+    # fires on the first external step -- but a quiet town produces none, and
+    # the bridge's embodiment observation can land before this dispatcher even
+    # exists. One documented manual trigger starts it; from there its EXIT trap
+    # arms the next wake every time, and the dispatcher owns the clock.
+    # Backgrounded: `thinkers step` runs the step to completion, which is
+    # minutes, and `up` must not block on a mind thinking.
+    echo "==> bootstrapping the monolith (dispatcher owns the clock from here)"
+    nohup thinkers step monolith >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+else
+    thinkers start responder 2>&1 | tail -2
+fi

@@ -208,9 +208,10 @@ class Agent:
             if self.identity.deliver_message(naming.encode(speaker), text):
                 # Wake the responder ourselves rather than trusting the
                 # dispatcher to notice the step we just appended.
-                step = self.identity.last_step()
-                if step and step.get("type") == "message":
-                    self.identity.trigger("responder", step)
+                if not self._dispatcher_wakes:
+                    step = self.identity.last_step()
+                    if step and step.get("type") == "message":
+                        self.identity.trigger("responder", step)
 
     def _notice_proximity(self) -> None:
         """Notice people coming and going.
@@ -310,15 +311,21 @@ class Agent:
     def tick_spontaneity(self) -> None:
         """Wake the monolith when nothing has happened for a while.
 
-        The bridge owns monolith wakes outright. Two independent wake sources
-        (headlong's dispatcher timer and the bridge's perception) raced: both
-        started a shellm run, the runs raced to create the identity's docker
-        env, and the loser left two containers and an empty container_id --
-        after which every subsequent run died with "Env <name> was created
-        without a mount for this run's workdir". A guard on one side cannot fix
-        a two-source race, so the monolith is not started under the dispatcher
-        at all and this is its only clock.
+        Only under wake="bridge". There the bridge owns monolith wakes
+        outright, because two independent wake sources (headlong's dispatcher
+        timer and the bridge's perception) raced: both started a shellm run,
+        the runs raced to create the identity's docker env, and the loser left
+        two containers and an empty container_id -- after which every run died
+        with "Env <name> was created without a mount for this run's workdir". A
+        guard on one side cannot fix a two-source race, so in that mode the
+        monolith is not started under the dispatcher at all and this is its
+        only clock.
+
+        Under the default wake="dispatcher" this must do nothing: the monolith
+        arms its own next wake and the dispatcher fires it.
         """
+        if self._dispatcher_wakes:
+            return          # the monolith arms its own next wake; do not race it
         if self.identity.is_running("monolith"):
             self._idle_since = time.monotonic()
             return
@@ -349,6 +356,8 @@ class Agent:
         dispatcher coalesces observation triggers for the same reason; this is
         the same policy, enforced by the adapter.
         """
+        if self._dispatcher_wakes:
+            return          # the observation we just appended is the trigger
         # One agentic run at a time. A monolith run reads the whole recent
         # stream when it starts, so anything that landed while it was running is
         # already covered -- a second concurrent run is pure duplicate cost.
@@ -366,6 +375,19 @@ class Agent:
         if not step or step.get("source") == "monolith":
             step = {"type": "monolith-wake", "source": "town"}
         self.identity.trigger("monolith", step)
+
+    @property
+    def _dispatcher_wakes(self) -> bool:
+        """Is headlong's dispatcher responsible for waking thinkers?
+
+        When it is, the bridge's job shrinks to translation: append the step and
+        stop. The dispatcher notices it and fires the right thinker, and the
+        monolith paces its own spontaneity via run/<name>.wake_at with
+        exponential backoff -- which is both the documented design and a better
+        clock than our fixed interval, since it slows down when nothing is
+        happening.
+        """
+        return self._t('wake', 'dispatcher') == 'dispatcher'
 
     def _t(self, name: str, fallback):
         """An experiment's value for a tunable, or the shipped default."""

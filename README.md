@@ -61,12 +61,15 @@ experiments/          your experiments — gitignored, they are your data
 state/                identities, trajectories, logs — gitignored
 ```
 
-The bridge is the only thing that touches both systems. It turns town events
-into Headlong `observation` steps, watches the mind's log for anything addressed
-to a townsperson, and wakes the right thinker itself rather than hoping the
-dispatcher notices. Headlong is a submodule and is never patched: everything is
-done through the surfaces it already exposes — thinkers, kernel skills, the
-trajectory as an event bus, and a bridge adapted from its own Slack adapter.
+The bridge is the only thing that touches both systems, and it only translates:
+town events become Headlong `observation` steps, and anything the mind addresses
+to a townsperson becomes speech in the town. It does not drive the minds —
+Headlong's own dispatcher notices the appended steps and fires the right thinker,
+and the monolith paces its own thinking with exponential backoff.
+
+Headlong is a submodule and is never patched: everything is done through the
+surfaces it already exposes — thinkers, kernel skills, the trajectory as an event
+bus, and a bridge adapted from its own Slack adapter.
 
 ## From a clean clone
 

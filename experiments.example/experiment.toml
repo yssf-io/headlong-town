@@ -41,6 +41,15 @@ persona = "personas/bo.md"
 # monolith_wake_cooldown = 30    # seconds; floor between perception-driven runs
 # meet_nudge_cooldown    = 45    # seconds; how often to remind a stalled walker
 # spontaneity_interval   = 90    # seconds a quiet mind waits before thinking
+# wake                   = "dispatcher"  # who wakes the thinkers.
+#                                   # "dispatcher" (default) is Headlong's own
+#                                   # flow: the bridge only appends steps and
+#                                   # the monolith paces itself with backoff.
+#                                   # "bridge" makes the bridge run thinkers
+#                                   # itself on a fixed timer — an escape hatch
+#                                   # for macOS/bash 3.2, where Headlong's
+#                                   # dispatcher has been seen to stop
+#                                   # delivering steps.
 # effort                 = "high"   # low/medium/high/xhigh/max — how hard the
 #                                   # model thinks before answering. ~95% of a
 #                                   # wakeup is spent waiting on the model, so

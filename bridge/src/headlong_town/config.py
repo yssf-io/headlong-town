@@ -60,6 +60,27 @@ class Experiment:
     # which suits a general agent; a townsperson mostly looks, decides and acts.
     # This is the lever on all three of: seconds per wakeup (~95% of a run is
     # waiting on the model), tokens burned per call, and spend per day.
+    # Who wakes the thinkers.
+    #   "dispatcher" — headlong's own flow, and the default. The bridge only
+    #                  appends steps; the dispatcher notices them and fires the
+    #                  right thinker, and the monolith paces itself by writing
+    #                  run/<name>.wake_at with exponential backoff
+    #                  (design/monolith_backoff.md) -- 0 while engaged, backing
+    #                  off to a cap while nothing happens.
+    #   "bridge"      — the bridge appends a step AND runs the thinker itself,
+    #                  on a fixed spontaneity timer. This was the default until
+    #                  2026-09-04, chosen after headlong's dispatcher silently
+    #                  stopped delivering steps (macOS, bash 3.2; root cause
+    #                  never found, PLAN §13). It does not reproduce on Linux
+    #                  with bash 5.3 -- verified over two full wake cycles --
+    #                  but macOS still ships bash 3.2, so this stays as an
+    #                  escape hatch rather than being deleted.
+    #
+    # "bridge" costs the dispatcher's guarantees, and this project had to
+    # reimplement all of them badly: busy-thinker refusal, process ownership,
+    # and not handing a thinker back its own step (which deadlocked a mind for
+    # 13 hours). Prefer "dispatcher" unless it demonstrably fails for you.
+    wake: str = "dispatcher"
     effort: str = "high"
     # Ceiling on ONE response. Reasoning tokens count against it, so a mind that
     # ruminates can spend the whole budget thinking and return nothing at all --
@@ -94,10 +115,15 @@ def load(path: Path) -> Experiment:
     for key in (
         "max_iterations", "proximity_range", "monolith_wake_cooldown",
         "meet_nudge_cooldown", "spontaneity_interval", "model",
-        "effort", "max_tokens",
+        "effort", "max_tokens", "wake",
     ):
         if key in bridge:
             setattr(exp, key, bridge[key])
+
+    if exp.wake not in ("bridge", "dispatcher"):
+        raise ExperimentError(
+            f"[bridge] wake must be \"bridge\" or \"dispatcher\" (got {exp.wake!r})"
+        )
 
     world = raw.get("world") or {}
     exp.stock_agents = list(world.get("stock_agents") or [])

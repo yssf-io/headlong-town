@@ -71,6 +71,7 @@ up)
     ITERS=$(spec_field max_iterations)
     EFFORT=$(spec_field effort)
     MAXTOK=$(spec_field max_tokens)
+    WAKE=$(spec_field wake)
     echo "==> experiment '$NAME': $(spec_field description)"
     echo "    minds:        $(echo "$MINDS" | tr '\n' ' ')"
     echo "    stock agents: ${STOCK:-(none)}"
@@ -166,10 +167,10 @@ up)
     sleep 10
     tail -3 state/logs/bridge.log | sed 's/^/    /'
 
-    echo "==> minds thinking"
+    echo "==> minds thinking (wake: $WAKE)"
     while IFS= read -r mind; do
         [[ -z "$mind" ]] && continue
-        ./scripts/restart-mind.sh "$mind" >/dev/null 2>&1 && echo "    $mind: running"
+        TOWN_WAKE_MODE="$WAKE" ./scripts/restart-mind.sh "$mind" >/dev/null 2>&1 && echo "    $mind: running"
     done <<< "$MINDS"
     echo "==> up."
     ;;
