@@ -26,6 +26,7 @@ logs/
 # ships the apparatus, what you observed with it is yours.
 FINDINGS.md
 RESULTS.md
+ISSUE-DRAFT.md
 
 # Experiments are the RESEARCHER'S data, not part of the software. The repo
 # ships the apparatus, sensible defaults, and a documented example spec
