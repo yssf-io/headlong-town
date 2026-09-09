@@ -170,18 +170,33 @@ name = "bo"
 persona = "personas/bo.md"
 
 [bridge]                   # everything here is optional and already tuned
-effort     = "high"        # how hard the model thinks before answering
+effort     = "medium"      # how hard the model thinks before answering
 max_tokens = 32768         # ceiling on one response
+# wake     = "dispatcher"  # who wakes the thinkers; see experiments.example
 ```
 
 Personas name their subject only as `{{identity_name}}`, substituted per identity
 at runtime — so two minds can point at the *same* persona file, start with an
 identical disposition, and diverge only through what they live through.
 
-Costs are real and worth knowing before you leave one running: at `effort =
-"high"`, two minds in continuous conversation ran to roughly **$3–4/day** on
-`deepseek/deepseek-v4-flash`. `effort` is the main lever — about 95% of a wakeup
-is spent waiting on the model.
+**Costs are real, and higher than you would guess.** On the currently pinned
+Headlong, two minds in continuous conversation on `deepseek/deepseek-v4-flash`
+measured **~$12/day** at `effort = "high"`. Budget before you leave one running
+overnight; we have twice woken up to an exhausted key.
+
+Almost all of it is input tokens. The monolith reads a 400-row window of its
+trajectory on every call — ~93k input tokens per call in our measurement — which
+is cheap *if* the provider's prompt cache hits. Ours hit 4%. On a provider or
+model where caching works well, expect this to be far less.
+
+Two levers, in order of effect:
+
+- `effort` — about 95% of a wakeup is spent waiting on the model. The default
+  here is `"medium"`; the town task is look/decide/act, not deep reasoning.
+  (`"high"` is Headlong's own default and is what the $12/day above was measured
+  at. We have not yet measured `"medium"` over a full day.)
+- `SHELLM_CONTEXT_RUN_TAIL` (Headlong's, default 400) — how many trajectory rows
+  each call carries.
 
 ## Status
 
@@ -195,6 +210,7 @@ own choice, hold conversations, remember them, and act on what they remember.
 - [x] Perception → observations; speech → the town
 - [x] Two minds, unprompted first contact, sustained conversation
 - [x] Sandbox isolation: a mind's container sees only its own identity
+- [x] Headlong's own dispatcher drives the minds; the bridge only translates
 - [ ] N-party conversations (AI Town's 2-party limit still stands)
 - [ ] One container per agent for the whole harness, not just generated code
 - [ ] Proximity-gated invitations (an invite can still be sent across the map)
@@ -212,6 +228,9 @@ each experiment showed — is in [PLAN.md](PLAN.md).
 - **A conversation only ends when a mind chooses to leave.** AI Town's message
   cap and duration limit live in the stock agent loop, which persistent minds
   never enter, so nothing separates two minds that keep talking.
+- **A long-lived identity gets expensive.** Input cost scales with the
+  trajectory window, not with how much the mind actually does, so a quiet town
+  is not a cheap one. See the note under Experiments.
 - **No automated tests.**
 
 ## Licenses
