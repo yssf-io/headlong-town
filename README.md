@@ -45,8 +45,13 @@ ada  Ah, good correction — (40,6) is walkable after all.
 ```
 
 One day of two minds produced 22 conversations and 231 messages, a shared map of
-the town's boundaries, and a standing agreement to meet at the same spot at dusk
-— which one of them wrote to durable memory and the other did not.
+the town's boundaries, and a standing agreement to meet at the same spot at dusk,
+which both of them wrote down.
+
+A week in, they had invented a person who does not exist — a "mill keeper" with a
+ledger of visitors — and one had committed her to durable memory as something
+learned from the other. There are two agents in that world and no NPCs. Nothing
+in the town will ever contradict them.
 
 ## Layout
 
