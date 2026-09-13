@@ -50,6 +50,16 @@ persona = "personas/bo.md"
 #                                   # for macOS/bash 3.2, where Headlong's
 #                                   # dispatcher has been seen to stop
 #                                   # delivering steps.
+# provider_only          = ""       # pin OpenRouter to specific upstream
+#                                   # host(s), comma-separated slugs, e.g.
+#                                   # "open-inference". Empty lets OpenRouter
+#                                   # choose per request — which scatters your
+#                                   # prompt cache across every host serving
+#                                   # the model (28 of them, for one we use),
+#                                   # and cached input is priced 5-30x below
+#                                   # fresh input. Hosts also differ in
+#                                   # quantization, so unpinned is not one
+#                                   # model. An unsatisfiable pin 404s.
 # effort                 = "high"   # low/medium/high/xhigh/max — how hard the
 #                                   # model thinks before answering. ~95% of a
 #                                   # wakeup is spent waiting on the model, so

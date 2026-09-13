@@ -72,6 +72,7 @@ up)
     EFFORT=$(spec_field effort)
     MAXTOK=$(spec_field max_tokens)
     WAKE=$(spec_field wake)
+    PROVIDER=$(spec_field provider_only)
     echo "==> experiment '$NAME': $(spec_field description)"
     echo "    minds:        $(echo "$MINDS" | tr '\n' ' ')"
     echo "    stock agents: ${STOCK:-(none)}"
@@ -140,6 +141,7 @@ up)
         set_env_var SHELLM_MAX_ITERATIONS "$ITERS"
         set_env_var SHELLM_EFFORT "$EFFORT"
         set_env_var SHELLM_MAX_TOKENS "$MAXTOK"
+        set_env_var LLM_OR_ONLY "$PROVIDER"
     done <<< "$(spec_field personas)"
 
     if [[ -n "$STOCK" ]]; then

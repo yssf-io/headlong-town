@@ -81,6 +81,23 @@ class Experiment:
     # and not handing a thinker back its own step (which deadlocked a mind for
     # 13 hours). Prefer "dispatcher" unless it demonstrably fails for you.
     wake: str = "dispatcher"
+    # Pin OpenRouter to specific upstream host(s), comma-separated slugs, via
+    # Headlong's LLM_OR_ONLY. Empty means "let OpenRouter choose".
+    #
+    # This matters more than it looks. OpenRouter fans one model id out over
+    # many hosts and picks one PER REQUEST -- 28 of them serve
+    # deepseek-v4-flash-0731 -- and each host has its own prompt cache. Measured
+    # unpinned over 2272 calls: 64% of calls got zero cached input, while the
+    # ones that did hit reached 100%. A prefix cached on one host is worthless
+    # on the next. Cached input is priced 5-30x below fresh input, so scattering
+    # the cache is most of what a long-lived identity pays for.
+    #
+    # The hosts also differ in quantization (fp4 / fp8 / bf16), so an unpinned
+    # run is not one model -- it is a different one per call.
+    #
+    # An unsatisfiable pin 404s rather than silently rerouting, which is the
+    # behaviour you want.
+    provider_only: str = ""
     effort: str = "high"
     # Ceiling on ONE response. Reasoning tokens count against it, so a mind that
     # ruminates can spend the whole budget thinking and return nothing at all --
@@ -115,7 +132,7 @@ def load(path: Path) -> Experiment:
     for key in (
         "max_iterations", "proximity_range", "monolith_wake_cooldown",
         "meet_nudge_cooldown", "spontaneity_interval", "model",
-        "effort", "max_tokens", "wake",
+        "effort", "max_tokens", "wake", "provider_only",
     ):
         if key in bridge:
             setattr(exp, key, bridge[key])
