@@ -18,10 +18,48 @@ import helpImg from '../../assets/help.svg';
 // "how long since" in the shortest form that is still honest.
 function since(ms: number): string {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 90) return `${s}s ago`;
+  if (s < 90) return `${s}s`;
   const m = Math.round(s / 60);
-  if (m < 90) return `${m}m ago`;
-  return `${Math.round(m / 60)}h ago`;
+  if (m < 90) return `${m}m`;
+  return `${Math.round(m / 60)}h`;
+}
+
+// One mind: thinking right now, or how long since it last finished anything.
+// A body can stand in the street looking perfectly well while the identity
+// driving it is wedged, deadlocked or out of credit -- "green and recent" is
+// the reassurance the town itself cannot give.
+type MindHealth = {
+  name: string;
+  running: boolean;
+  lastWakeAt?: number;
+  lastFinalAt?: number;
+  lastError?: string;
+  lastErrorAt?: number;
+};
+
+function MindChip({ mind }: { mind: MindHealth }) {
+  const failing =
+    mind.lastError && (!mind.lastFinalAt || (mind.lastErrorAt ?? 0) > mind.lastFinalAt);
+  const dot = failing ? 'bg-red-400' : mind.running ? 'bg-green-400' : 'bg-clay-500';
+  const detail = failing
+    ? String(mind.lastError)
+    : mind.running
+      ? `thinking${mind.lastWakeAt ? ` (started ${since(mind.lastWakeAt)} ago)` : ''}`
+      : mind.lastFinalAt
+        ? `idle, last finished ${since(mind.lastFinalAt)} ago`
+        : 'idle, nothing finished yet';
+  return (
+    <span
+      className="flex items-baseline gap-1 text-sm text-clay-100"
+      title={`${mind.name}: ${detail}`}
+    >
+      <span className={`inline-block h-1.5 w-1.5 rounded-full ${dot}`} />
+      <span>{mind.name}</span>
+      <span className="text-clay-500 tabular-nums">
+        {failing ? '!' : mind.running ? '…' : mind.lastFinalAt ? since(mind.lastFinalAt) : '—'}
+      </span>
+    </span>
+  );
 }
 
 function Readout({ label, value }: { label: string; value: string | number | undefined }) {
@@ -48,33 +86,14 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const live = status === 'running' && engine?.running;
 
   const npcCount = world?.agents.length ?? 0;
-  const mindCount = (world?.players.length ?? 0) - npcCount;
 
-  // How many minds are mid-run, and how long since the quietest one last
-  // finished anything. A body can stand in the street looking well while the
-  // identity driving it is wedged, deadlocked or out of credit -- which is how
-  // every long outage in this project stayed invisible.
-  const minds = health?.minds ?? [];
-  const runningNow = minds.filter((m) => m.running).length;
-  const lastFinals = minds.map((m) => m.lastFinalAt).filter((t): t is number => !!t);
-  const stalest = lastFinals.length === minds.length && lastFinals.length > 0
-    ? Math.min(...lastFinals)
-    : undefined;
-  // A mind whose most recent outcome was an error, not a completed run.
-  const failing = minds.filter(
-    (m) => m.lastError && (!m.lastFinalAt || (m.lastErrorAt ?? 0) > m.lastFinalAt),
-  );
-  const thinkingLabel = minds.length
-    ? `${runningNow}/${minds.length}` +
-      (stalest ? ` · ${since(stalest)}` : '') +
-      (failing.length ? ` · ${failing.length} failing` : '')
-    : undefined;
+  // Per mind, not an aggregate: with a handful of minds the question is
+  // "which one is stuck", and a fraction cannot answer it.
+  const minds = (health?.minds ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
 
   const budget = health?.budget;
   const budgetLabel = budget
-    ? budget.limit != null
-      ? `$${Math.max(budget.limit - budget.spent, 0).toFixed(2)} left`
-      : `$${budget.spent.toFixed(2)} spent`
+    ? `$${budget.spent.toFixed(2)}${budget.limit != null ? ` / $${budget.limit.toFixed(0)}` : ''}`
     : undefined;
 
   return (
@@ -110,13 +129,25 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
             it is NOT a count of humans. `agents` is AI Town's own stateless
             NPCs, which most experiments run none of. Labelling those "people"
             and "agents" had it exactly backwards for this project. */}
-        <Readout label="minds" value={mindCount} />
+        <div className="flex items-baseline gap-2">
+          <span className="text-[10px] uppercase tracking-[0.15em] text-clay-500">minds</span>
+          {minds.length === 0 ? (
+            <span className="text-sm text-clay-100">—</span>
+          ) : (
+            minds.map((m) => <MindChip key={m.name} mind={m} />)
+          )}
+        </div>
         {npcCount > 0 && <Readout label="npcs" value={npcCount} />}
-        <Readout label="talking" value={world?.conversations.length} />
-        <span title={failing.length ? failing.map((m) => `${m.name}: ${m.lastError}`).join('\n') : 'minds mid-run / total, and how long since the quietest one finished anything'}>
-          <Readout label="thinking" value={thinkingLabel} />
+        {/* AI Town keeps a conversation object alive from acceptance until
+            somebody leaves, so this counts OPEN CONVERSATIONS -- not whether
+            anyone is speaking. Two minds who said goodbye but never ran
+            `town leave` still read 1. */}
+        <span title="Open conversations. One stays open until someone leaves, so this can read 1 through a long silence.">
+          <Readout label="in conversation" value={world?.conversations.length} />
         </span>
-        <Readout label="budget" value={budgetLabel} />
+        <span title="Spent on this API key so far.">
+          <Readout label="spent" value={budgetLabel} />
+        </span>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
