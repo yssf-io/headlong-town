@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import platform
@@ -11,6 +12,7 @@ import subprocess
 import signal
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 from .agent import Agent
@@ -95,6 +97,32 @@ def _install_town_env(identity: Identity, token: str, port: int) -> None:
     env_file.chmod(0o600)
 
 
+def _openrouter_budget() -> tuple[float | None, float | None]:
+    """Ask OpenRouter what this key has spent. Best-effort and quiet.
+
+    The number that most often mattered and was never on screen: this project
+    has twice woken up to a town that stopped overnight on an exhausted key,
+    with every log reading normal.
+    """
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        return None, None
+    try:
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/key",
+            headers={"Authorization": f"Bearer {key}"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.load(resp).get("data") or {}
+        spent = data.get("usage")
+        return (float(spent) if spent is not None else None), (
+            float(data["limit"]) if data.get("limit") is not None else None
+        )
+    except Exception:
+        log.debug("budget probe failed", exc_info=True)
+        return None, None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="headlong-town-bridge")
     parser.add_argument("identities", nargs="+", help="identity names to embody")
@@ -170,6 +198,13 @@ def main(argv: list[str] | None = None) -> int:
     # Well inside IDLE_WORLD_TIMEOUT (5 min) without hammering the mutation.
     heartbeat_every = 30.0
     last_heartbeat = 0.0
+    # Budget is per API key, so one probe serves every mind. Slow on purpose:
+    # it is an HTTP call to the provider, and the number moves in cents.
+    budget_every = 120.0
+    # Negative so the first tick probes immediately: time.monotonic() starts
+    # near zero, so a 0.0 here leaves the readout blank for the first interval
+    # after every restart -- exactly when someone is looking at it.
+    last_budget = -budget_every
 
     while not stopping:
         now = time.monotonic()
@@ -180,11 +215,18 @@ def main(argv: list[str] | None = None) -> int:
             except ConvexError as exc:
                 log.warning("heartbeat: %s", exc)
 
+        if now - last_budget > budget_every:
+            last_budget = now
+            spent, limit = _openrouter_budget()
+            if spent is not None:
+                world.report_budget(spent, limit)
+
         for agent in agents:
             try:
                 agent.poll_town()
                 agent.poll_mind()
                 agent.tick_spontaneity()
+                agent.push_health()
             except ConvexError as exc:
                 # A backend blip must not kill the bridge; the next tick retries.
                 log.warning("convex: %s", exc)

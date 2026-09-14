@@ -21,6 +21,27 @@ export default defineSchema({
     .index('conversationId', ['worldId', 'conversationId'])
     .index('messageUuid', ['conversationId', 'messageUuid']),
 
+  // Health of the Headlong identities driving the bodies. Written by the
+  // bridge, read by the top bar. See convex/mindStatus.ts.
+  mindStatus: defineTable({
+    worldId: v.id('worlds'),
+    name: v.string(),
+    playerId: v.optional(v.string()),
+    running: v.boolean(),
+    lastWakeAt: v.optional(v.number()),
+    lastFinalAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    lastErrorAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index('worldName', ['worldId', 'name']),
+
+  budgetStatus: defineTable({
+    worldId: v.id('worlds'),
+    spent: v.number(),
+    limit: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index('worldId', ['worldId']),
+
   ...agentTables,
   ...aiTownTables,
   ...engineTables,

@@ -26,6 +26,17 @@ from .world import World
 
 log = logging.getLogger(__name__)
 
+
+def _ms(ts: str | None) -> int | None:
+    """Trajectory timestamps are ISO-8601 Z; the town speaks epoch millis."""
+    if not ts:
+        return None
+    try:
+        import datetime as _dt
+        return int(_dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000)
+    except Exception:
+        return None
+
 # convex/constants.ts
 CONVERSATION_DISTANCE = 1.3
 MIDPOINT_THRESHOLD = 4.0
@@ -71,6 +82,9 @@ class Agent:
         self._near: set[str] = set()
         self._run_failures = 0
         self._last_run_failure = ""
+        self._health: dict[str, Any] = {"running": False}
+        self._health_sent: dict[str, Any] | None = None
+        self._health_pushed = 0.0
 
     def _load_cursor(self) -> int:
         if self._cursor_file.is_file():
@@ -376,6 +390,23 @@ class Agent:
             step = {"type": "monolith-wake", "source": "town"}
         self.identity.trigger("monolith", step)
 
+    def push_health(self, force: bool = False) -> None:
+        """Send health to the town when it changed, or every 30s regardless.
+
+        Rate-limited rather than per-tick: the bridge polls every couple of
+        seconds and most ticks change nothing.
+        """
+        now = time.monotonic()
+        if not force and self._health == self._health_sent and now - self._health_pushed < 30:
+            return
+        self._health_sent = dict(self._health)
+        self._health_pushed = now
+        self.world.report_mind_status(
+            name=self.identity.name,
+            playerId=self.player_id,
+            **self._health,
+        )
+
     @property
     def _dispatcher_wakes(self) -> bool:
         """Is headlong's dispatcher responsible for waking thinkers?
@@ -456,6 +487,17 @@ class Agent:
             self._offset = offset
             self._save_cursor()
         for step in steps:
+            # Health, derived from steps we are reading anyway. A run starting,
+            # finishing or dying is the only evidence that the mind behind a
+            # body is alive, and nothing else in the town can see it.
+            kind = step.get("type")
+            if kind == "shellm-run":
+                self._health.update(running=True, lastWakeAt=_ms(step.get("ts")))
+            elif kind == "final":
+                self._health.update(running=False, lastFinalAt=_ms(step.get("ts")))
+            elif kind == "error":
+                self._health.update(running=False, lastErrorAt=_ms(step.get("ts")),
+                                    lastError=(step.get("content") or "run failed")[:200])
             if step.get("type") == "error":
                 self._notice_run_failure(step)
                 continue

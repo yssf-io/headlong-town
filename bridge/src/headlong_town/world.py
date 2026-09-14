@@ -172,6 +172,30 @@ class World:
         m = self.descriptions()["worldMap"]
         return any(layer[int(x)][int(y)] != -1 for layer in m["objectTiles"])
 
+    def report_mind_status(self, **fields: Any) -> None:
+        """Tell the town whether the mind behind a body is actually thinking.
+
+        The UI can see a body standing in the street; it cannot see a wedged,
+        deadlocked or unfunded identity. Every long outage in this project
+        looked healthy from the town's side, so this is the gap being closed.
+        Best-effort: a failure here must never disturb the run.
+        """
+        try:
+            self.convex.mutation("mindStatus:report", worldId=self.world_id, **fields)
+        except Exception:
+            log.debug("mind status report failed", exc_info=True)
+
+    def report_budget(self, spent: float, limit: float | None) -> None:
+        """Put remaining API budget on screen. We have twice woken up to a town
+        that stopped overnight because the key ran dry with nothing saying so."""
+        try:
+            args: dict[str, Any] = {"worldId": self.world_id, "spent": spent}
+            if limit is not None:
+                args["limit"] = limit
+            self.convex.mutation("mindStatus:reportBudget", **args)
+        except Exception:
+            log.debug("budget report failed", exc_info=True)
+
     def accept_invite(self, player_id: str, conversation_id: str) -> None:
         self.send_input("acceptInvite", {"playerId": player_id, "conversationId": conversation_id})
 

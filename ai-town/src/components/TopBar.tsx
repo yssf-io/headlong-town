@@ -15,6 +15,15 @@ import helpImg from '../../assets/help.svg';
  * in it is live state a watcher actually wants — which experiment they are
  * looking at, and whether its engine is still ticking.
  */
+// "how long since" in the shortest form that is still honest.
+function since(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 90) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 90) return `${m}m ago`;
+  return `${Math.round(m / 60)}h ago`;
+}
+
 function Readout({ label, value }: { label: string; value: string | number | undefined }) {
   return (
     <div className="flex items-baseline gap-1.5">
@@ -29,6 +38,7 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   const worldStatus = useWorldStatus();
   const worldId = worldStatus?.worldId;
   const worldState = useQuery(api.world.worldState, worldId ? { worldId } : 'skip');
+  const health = useQuery(api.mindStatus.forWorld, worldId ? { worldId } : 'skip');
 
   const world = worldState?.world;
   const engine = worldState?.engine;
@@ -36,6 +46,36 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
   // `running` is the engine's own flag; the world can also be paused by a
   // developer or idled out, and those are different things to a watcher.
   const live = status === 'running' && engine?.running;
+
+  const npcCount = world?.agents.length ?? 0;
+  const mindCount = (world?.players.length ?? 0) - npcCount;
+
+  // How many minds are mid-run, and how long since the quietest one last
+  // finished anything. A body can stand in the street looking well while the
+  // identity driving it is wedged, deadlocked or out of credit -- which is how
+  // every long outage in this project stayed invisible.
+  const minds = health?.minds ?? [];
+  const runningNow = minds.filter((m) => m.running).length;
+  const lastFinals = minds.map((m) => m.lastFinalAt).filter((t): t is number => !!t);
+  const stalest = lastFinals.length === minds.length && lastFinals.length > 0
+    ? Math.min(...lastFinals)
+    : undefined;
+  // A mind whose most recent outcome was an error, not a completed run.
+  const failing = minds.filter(
+    (m) => m.lastError && (!m.lastFinalAt || (m.lastErrorAt ?? 0) > m.lastFinalAt),
+  );
+  const thinkingLabel = minds.length
+    ? `${runningNow}/${minds.length}` +
+      (stalest ? ` · ${since(stalest)}` : '') +
+      (failing.length ? ` · ${failing.length} failing` : '')
+    : undefined;
+
+  const budget = health?.budget;
+  const budgetLabel = budget
+    ? budget.limit != null
+      ? `$${Math.max(budget.limit - budget.spent, 0).toFixed(2)} left`
+      : `$${budget.spent.toFixed(2)} spent`
+    : undefined;
 
   return (
     <header className="z-20 flex shrink-0 items-center gap-x-5 gap-y-2 flex-wrap border-b-2 border-black/60 bg-brown-900/95 px-4 py-2 backdrop-blur">
@@ -65,9 +105,18 @@ export default function TopBar({ onHelp }: { onHelp: () => void }) {
         {/* Generation increments on every engine restart, so it doubles as a
             liveness tell: frozen number, stalled engine. */}
         <Readout label="gen" value={engine?.generationNumber} />
-        <Readout label="agents" value={world?.agents.length} />
-        <Readout label="people" value={world?.players.length} />
+        {/* `players` is every body in the town. Headlong minds take their
+            bodies through the same path a human does, so this counts them --
+            it is NOT a count of humans. `agents` is AI Town's own stateless
+            NPCs, which most experiments run none of. Labelling those "people"
+            and "agents" had it exactly backwards for this project. */}
+        <Readout label="minds" value={mindCount} />
+        {npcCount > 0 && <Readout label="npcs" value={npcCount} />}
         <Readout label="talking" value={world?.conversations.length} />
+        <span title={failing.length ? failing.map((m) => `${m.name}: ${m.lastError}`).join('\n') : 'minds mid-run / total, and how long since the quietest one finished anything'}>
+          <Readout label="thinking" value={thinkingLabel} />
+        </span>
+        <Readout label="budget" value={budgetLabel} />
       </div>
 
       <div className="ml-auto flex items-center gap-2">
