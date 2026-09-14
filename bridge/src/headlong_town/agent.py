@@ -397,14 +397,29 @@ class Agent:
         seconds and most ticks change nothing.
         """
         now = time.monotonic()
-        if not force and self._health == self._health_sent and now - self._health_pushed < 30:
+        # `running` is answered by the process table, not inferred from steps.
+        #
+        # Steps cannot answer it. A run that exhausts max_iterations writes no
+        # terminal step at all -- shellm's "(max iterations reached)" record
+        # sits behind a guard that is skipped when --traj is used, which is
+        # exactly how the monolith invokes it -- and a run killed mid-flight
+        # writes nothing either. Either way the last step we saw is shellm-run,
+        # so step-derived state would claim the mind is thinking indefinitely.
+        #
+        # The tempting fix is to treat a new run as closing the previous one.
+        # That is a guess, and runs do occasionally overlap (1 in 113 here), so
+        # it would sometimes report a live run as dead -- the failure that stops
+        # you noticing real wedges. Asking whether a process exists is evidence.
+        health = dict(self._health)
+        health["running"] = self.identity.is_running("monolith")
+        if not force and health == self._health_sent and now - self._health_pushed < 30:
             return
-        self._health_sent = dict(self._health)
+        self._health_sent = dict(health)
         self._health_pushed = now
         self.world.report_mind_status(
             name=self.identity.name,
             playerId=self.player_id,
-            **self._health,
+            **health,
         )
 
     @property
@@ -492,11 +507,11 @@ class Agent:
             # body is alive, and nothing else in the town can see it.
             kind = step.get("type")
             if kind == "shellm-run":
-                self._health.update(running=True, lastWakeAt=_ms(step.get("ts")))
+                self._health["lastWakeAt"] = _ms(step.get("ts"))
             elif kind == "final":
-                self._health.update(running=False, lastFinalAt=_ms(step.get("ts")))
+                self._health["lastFinalAt"] = _ms(step.get("ts"))
             elif kind == "error":
-                self._health.update(running=False, lastErrorAt=_ms(step.get("ts")),
+                self._health.update(lastErrorAt=_ms(step.get("ts")),
                                     lastError=(step.get("content") or "run failed")[:200])
             if step.get("type") == "error":
                 self._notice_run_failure(step)
