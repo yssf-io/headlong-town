@@ -9,6 +9,7 @@ import { useSendInput } from '../hooks/sendInput';
 import { Player } from '../../convex/aiTown/player';
 import { GameId } from '../../convex/aiTown/ids';
 import { ServerGame } from '../hooks/serverGame';
+import { mindDashboardUrl } from '../mindDashboard';
 
 export default function PlayerDetails({
   worldId,
@@ -47,6 +48,14 @@ export default function PlayerDetails({
   );
 
   const playerDescription = playerId && game.playerDescriptions.get(playerId);
+
+  // Only Headlong identities have a dashboard. This panel also renders for AI
+  // Town's own NPCs and for human visitors, and linking those would hand you a
+  // 404 named after someone real.
+  const health = useQuery(api.mindStatus.forWorld, { worldId });
+  const isMind = !!(
+    playerDescription?.name && health?.minds.some((m) => m.name === playerDescription.name)
+  );
 
   const startConversation = useSendInput(engineId, 'startConversation');
   const acceptInvite = useSendInput(engineId, 'acceptInvite');
@@ -138,6 +147,32 @@ export default function PlayerDetails({
           <h2 className="bg-brown-700 p-2 font-display text-2xl sm:text-4xl tracking-wider shadow-solid text-center">
             {playerDescription?.name}
           </h2>
+          {/* The town can show you a body; only the dashboard can show you
+              whether there is a mind behind it and what it is thinking.
+              Clicking the character is the natural way to ask. */}
+          {isMind && playerDescription?.name && (
+            <div className="bg-brown-800 px-2 py-1 text-center">
+              <a
+                href={mindDashboardUrl(playerDescription.name)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm underline decoration-clay-500 underline-offset-2 hover:text-white"
+                title={`Open ${playerDescription.name}'s mind log`}
+              >
+                mind log
+              </a>
+              <span className="px-2 text-clay-500">·</span>
+              <a
+                href={mindDashboardUrl(playerDescription.name, 'memories')}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm underline decoration-clay-500 underline-offset-2 hover:text-white"
+                title={`What ${playerDescription.name} has committed to memory`}
+              >
+                memories
+              </a>
+            </div>
+          )}
         </div>
         <a
           className="button text-white shadow-solid text-2xl cursor-pointer pointer-events-auto"

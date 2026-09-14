@@ -1,6 +1,7 @@
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { useExperimentName, useWorldStatus } from '../hooks/useWorldStatus';
+import { mindDashboardUrl } from '../mindDashboard';
 import FreezeButton from './FreezeButton';
 import MusicButton from './buttons/MusicButton';
 import InteractButton from './buttons/InteractButton';
@@ -49,16 +50,19 @@ function MindChip({ mind }: { mind: MindHealth }) {
         ? `idle, last finished ${since(mind.lastFinalAt)} ago`
         : 'idle, nothing finished yet';
   return (
-    <span
-      className="flex items-baseline gap-1 text-sm text-clay-100"
-      title={`${mind.name}: ${detail}`}
+    <a
+      href={mindDashboardUrl(mind.name)}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-baseline gap-1 text-sm text-clay-100 hover:text-white hover:underline decoration-clay-500 underline-offset-2"
+      title={`${mind.name}: ${detail}\nOpen its mind log`}
     >
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${dot}`} />
       <span>{mind.name}</span>
       <span className="text-clay-500 tabular-nums">
         {failing ? '!' : mind.running ? '…' : mind.lastFinalAt ? since(mind.lastFinalAt) : '—'}
       </span>
-    </span>
+    </a>
   );
 }
 
